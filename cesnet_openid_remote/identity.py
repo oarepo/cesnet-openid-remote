@@ -40,7 +40,6 @@ def extend_identity(identity, roles):
     )
     identity.provides |= provides
     session[sconf['key']] = provides
-    _get_principal(current_app).set_identity(identity)
 
 
 def disconnect_identity(identity):
