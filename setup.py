@@ -20,7 +20,8 @@ OAREPO_VERSION = os.environ.get('OAREPO_VERSION', '3.3.0')
 tests_require = [
     'pydocstyle',
     'isort',
-    'invenio-userprofiles'
+    'invenio-userprofiles',
+    'invenio-oauthclient==1.4.0'
 ]
 
 extras_require = {
