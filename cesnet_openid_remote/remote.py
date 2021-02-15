@@ -23,7 +23,7 @@ from cesnet_openid_remote.constants import OPENIDC_GROUPS_KEY, OPENIDC_CONFIG, O
 from cesnet_openid_remote.errors import OAuthCESNETRejectedAccountError
 from cesnet_openid_remote.groups import add_user_role_from_group, validate_group_uri, parse_group_uri, \
     disconnect_user_role
-from cesnet_openid_remote.identity import extend_identity
+from cesnet_openid_remote.identity import extend_identity, disconnect_identity
 
 """Pre-configured remote application for enabling sign in/up with eduID federated accounts."""
 
@@ -38,8 +38,8 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
     """CESNET OIDC Remote Auth backend for OARepo."""
     CONFIG_OPENID = OPENIDC_CONFIG
 
-    name = 'CESNET eduID Login',
-    description = 'Log In with your eduID account',
+    name = 'CESNET eduID Login'
+    description = 'Log In with your eduID account'
 
     def __init__(self):
         """Initialize the remote app."""
@@ -64,6 +64,7 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
             response_handler=default_remote_response_handler,
             authorized_redirect_url='/api/oauth/complete/',
             error_redirect_url='/error',
+            disconnect_redirect_url='/logged-out',
             logout_url='https://login.cesnet.cz/oidc/endsession'))
         return conf
 
@@ -125,9 +126,9 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
             # Create user <-> external id link.
             oauth_link_external_id(user, dict(id=user_id, method=self.name))
 
-    def fetch_extra_data(self, resource):
+    def fetch_extra_data(self, user_info, user_id):
         """"Fetch extra account data from resource."""
-        extra_data = resource.get('user_info').__dict__
+        extra_data = user_info
         cesnet_groups = []
 
         group_uris = extra_data.pop(OPENIDC_GROUPS_SCOPE, [])
@@ -138,7 +139,7 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
             cesnet_groups.append(guuid)
 
         extra_data[OPENIDC_GROUPS_KEY] = cesnet_groups
-        extra_data['external_id'] = resource.get('user_id')
+        extra_data['external_id'] = user_id
         extra_data['external_method'] = self.name
         return extra_data
 
@@ -154,7 +155,9 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
         if last_update > modified_since:
             return account.extra_data.get(OPENIDC_GROUPS_KEY, [])
 
-        extra_data = self.extras_serializer(resource)
+        user_info = resource.get('user_info').__dict__
+        user_id = resource.pop('user_id')
+        extra_data = self.extras_serializer(user_info, user_id)
 
         groups = extra_data.get(OPENIDC_GROUPS_KEY, [])
         account.extra_data.update(
@@ -173,13 +176,15 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
         account = RemoteAccount.get(user_id=current_user.get_id(),
                                     client_id=remote.consumer_key)
         sub = account.extra_data.get('sub')
-        user_info = remote.get_userinfo(remote)
+        user_info = self.get_userinfo(remote)
         resource = dict(user_info=user_info,
-                        user_id=remote.get_user_id(remote, email=user_info.email))
+                        user_id=self.get_user_id(remote, email=user_info.email))
 
         groups = self.account_roles_and_extra_data(account, resource)
         for guuid in groups:
             disconnect_user_role(current_user.email, guuid)
+
+        disconnect_identity(g.identity)
 
         if sub:
             oauth_unlink_external_id({'id': sub, 'method': self.name})

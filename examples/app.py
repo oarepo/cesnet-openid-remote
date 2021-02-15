@@ -27,6 +27,9 @@ import os
 from flask_login import current_user
 from invenio_accounts import InvenioAccounts
 from invenio_db import InvenioDB
+from flask_oauthlib.client import OAuth as FlaskOAuth
+from invenio_oauthclient import InvenioOAuthClient, InvenioOAuthClientREST
+from invenio_oauthclient.views.client import rest_blueprint
 
 from cesnet_openid_remote import CESNETOpenIDRemote
 from flask import Flask, redirect, url_for
@@ -53,7 +56,12 @@ app.config.update(
 Babel(app)
 InvenioDB(app)
 InvenioAccounts(app)
+FlaskOAuth(app)
+InvenioOAuthClient(app)
+InvenioOAuthClientREST(app)
 CESNETOpenIDRemote(app)
+
+app.register_blueprint(rest_blueprint)
 
 
 @app.route('/cesnet')

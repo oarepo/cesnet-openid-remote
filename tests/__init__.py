@@ -6,10 +6,4 @@
 # modify it under the terms of the MIT License; see LICENSE file for more
 # details.
 
-"""Version information for CESNET-OpenID-Remote.
-
-This file is imported by ``cesnet_openid_remote.__init__``,
-and parsed by ``setup.py``.
-"""
-
-__version__ = '1.0.0'
+"""Pytest configuration."""

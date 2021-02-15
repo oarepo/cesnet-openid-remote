@@ -8,10 +8,10 @@
 
 """CESNET OIDC Auth backend for OARepo"""
 from datetime import timedelta
-
-from flask import current_app, session
-from flask_login import current_user
+from flask import current_app, session, g
+from flask_login import current_user, user_logged_out, user_logged_in
 from flask_principal import identity_loaded, AnonymousIdentity, identity_changed, RoleNeed, UserNeed
+from flask_security.core import _get_principal
 from invenio_oauthclient.models import RemoteAccount
 from invenio_oauthclient.utils import obj_or_import_string
 from werkzeug.local import LocalProxy
@@ -36,7 +36,7 @@ sconf = LocalProxy(
 def extend_identity(identity, roles):
     """Extend identity with roles based on CESNET groups."""
     provides = set(
-        [UserNeed(current_user.email)] + [RoleNeed(name) for name in roles]
+        [UserNeed(current_user.email), UserNeed(identity.id)] + [RoleNeed(name) for name in roles]
     )
     identity.provides |= provides
     session[sconf['key']] = provides
@@ -46,6 +46,12 @@ def disconnect_identity(identity):
     """Disconnect identity from CESNET groups."""
     provides = session.pop(sconf['key'], set())
     identity.provides -= provides
+
+
+@user_logged_out.connect
+def handle_logout(sender, user):
+    """Remove provides and session data from identity."""
+    disconnect_identity(g.identity)
 
 
 @identity_changed.connect
@@ -59,7 +65,6 @@ def on_identity_changed(sender, identity):
     remote = obj_or_import_string('cesnet_openid_remote.remote.CesnetOpenIdRemote')()
 
     if isinstance(identity, AnonymousIdentity):
-        disconnect_identity(identity)
         return
 
     logged_in_via_token = \
@@ -68,7 +73,7 @@ def on_identity_changed(sender, identity):
 
     client_id = remote.get_consumer_key()
     remote_account = RemoteAccount.get(
-        user_id=current_user.get_id(), client_id=client_id
+        user_id=identity.id, client_id=client_id
     )
     roles = []
 
