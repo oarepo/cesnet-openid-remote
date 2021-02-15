@@ -22,7 +22,6 @@ from invenio_accounts import InvenioAccounts
 from invenio_db import InvenioDB, db
 from invenio_oauthclient import InvenioOAuthClient, InvenioOAuthClientREST
 from invenio_oauthclient.views.client import rest_blueprint
-from invenio_userprofiles import InvenioUserProfiles
 from sqlalchemy_utils import database_exists, create_database, drop_database
 
 from cesnet_openid_remote import CesnetOpenIdRemote, CESNETOpenIDRemote
@@ -68,7 +67,6 @@ def base_app(request):
     )
     InvenioDB(base_app)
     InvenioAccounts(base_app)
-    InvenioUserProfiles(base_app)
 
     with base_app.app_context():
         if str(db.engine.url) != 'sqlite://' and \
