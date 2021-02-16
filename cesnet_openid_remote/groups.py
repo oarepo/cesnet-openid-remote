@@ -70,16 +70,11 @@ def add_user_role_from_group(user, group_uuid, extra_data):
         current_app.logger.error(f'Cannot assign role {group_uuid} to empty user')
         return False
     if role is None:
-        role_kwargs = dict(name=group_uuid)
-        if 'displayName' in extra_data:
-            role_kwargs['description'] = extra_data.pop('displayName')
-        if not current_datastore.create_role(**role_kwargs):
-            current_app.logger.error(f'Failed to create role {role_kwargs}')
-            return False
+        current_app.logger.warning(f'Cannot assign user {user} to role {group_uuid}. Role does not exist.')
+        return False
 
     if not current_datastore.add_role_to_user(user, group_uuid):
-        current_app.logger.error(f'Failed to add {user} to role {group_uuid}')
-        return False
+        current_app.logger.warning(f'Failed to add {user} to role {group_uuid}. Already role member.')
 
     return True
 

@@ -10,8 +10,6 @@
 import os
 from datetime import timedelta
 
-from werkzeug.local import LocalProxy
-
 from cesnet_openid_remote import CesnetOpenIdRemote
 from cesnet_openid_remote.constants import OPENIDC_GROUPS_SCOPE, OPENIDC_BASE_URL
 
@@ -39,6 +37,9 @@ OAUTHCLIENT_CESNET_OPENID_GROUP_VALIDATOR = 'cesnet_openid_remote.groups.validat
 
 OAUTHCLIENT_CESNET_OPENID_GROUP_PARSER = 'cesnet_openid_remote.groups.parse_group_uri'
 """Function used to parse external group URIs to (UUID, extra_data) pairs."""
+
+OAUTHCLIENT_CESNET_OPENID_STATE_TRANSFORM = 'cesnet_openid_remote.state.transform_state_data'
+"""Function used to validate external group URIs."""
 
 OAUTHCLIENT_REST_REMOTE_APPS = dict(
     eduid=CesnetOpenIdRemote().remote_app(),

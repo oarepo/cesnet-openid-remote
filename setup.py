@@ -20,7 +20,7 @@ OAREPO_VERSION = os.environ.get('OAREPO_VERSION', '3.3.0')
 tests_require = [
     'pydocstyle',
     'isort',
-    'invenio-oauthclient==1.4.0'
+    'oarepo-communities'
 ]
 
 extras_require = {
@@ -38,7 +38,7 @@ setup_requires = [
 ]
 
 install_requires = [
-    'invenio-openid-connect',
+    'invenio-openid-connect>=2.1.0',
 ]
 
 packages = find_packages()

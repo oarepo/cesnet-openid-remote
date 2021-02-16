@@ -135,8 +135,8 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
         group_uris = [gr for gr in group_uris if self.group_validate(gr)]
         for gi in group_uris:
             guuid, extra = self.group_parser(gi)
-            add_user_role_from_group(extra_data.get('email'), guuid, extra)
-            cesnet_groups.append(guuid)
+            if add_user_role_from_group(extra_data.get('email'), guuid, extra):
+                cesnet_groups.append(guuid)
 
         extra_data[OPENIDC_GROUPS_KEY] = cesnet_groups
         extra_data['external_id'] = user_id

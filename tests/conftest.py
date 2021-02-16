@@ -14,14 +14,20 @@ fixtures are available.
 import os
 import shutil
 import tempfile
+import uuid
 
 import pytest
 from flask import Flask
 from flask_oauthlib.client import OAuth as FlaskOAuth, OAuthResponse
 from invenio_accounts import InvenioAccounts
+from invenio_accounts.proxies import current_datastore
 from invenio_db import InvenioDB, db
 from invenio_oauthclient import InvenioOAuthClient, InvenioOAuthClientREST
 from invenio_oauthclient.views.client import rest_blueprint
+from invenio_openid_connect.views import blueprint as openid_blueprint
+from invenio_openid_connect import InvenioOpenIDConnect
+from oarepo_communities import OARepoCommunities
+from oarepo_communities.api import OARepoCommunity
 from sqlalchemy_utils import database_exists, create_database, drop_database
 
 from cesnet_openid_remote import CesnetOpenIdRemote, CESNETOpenIDRemote
@@ -64,6 +70,7 @@ def base_app(request):
         SECURITY_PASSWORD_SCHEMES=['plaintext'],
         APP_ALLOWED_HOSTS=['localhost'],
         USERPROFILES_EXTEND_SECURITY_FORMS=True,
+        SECURITY_SEND_REGISTER_EMAIL=False
     )
     InvenioDB(base_app)
     InvenioAccounts(base_app)
@@ -94,11 +101,21 @@ def app(base_app):
     FlaskOAuth(base_app)
     InvenioOAuthClient(base_app)
     InvenioOAuthClientREST(base_app)
+    InvenioOpenIDConnect(base_app)
     CESNETOpenIDRemote(base_app)
 
     # Register blueprint
     base_app.register_blueprint(rest_blueprint)
+    base_app.register_blueprint(openid_blueprint)
     return base_app
+
+
+@pytest.fixture
+def communities_app(app):
+    """Flask application with communities extension."""
+    OARepoCommunities(app)
+
+    return app
 
 
 @pytest.fixture
@@ -158,3 +175,20 @@ def example_cesnet(request):
         external_method='CESNET eduID Login',
         active=True
     )
+
+
+@pytest.fixture()
+def community():
+    members = current_datastore.create_role(name='f0c14f62-b19c-447e-b044-c3098cebb426', description='member')
+    curators = current_datastore.create_role(name='8ece6adb-8677-4482-9aec-5a556c646389', description='curator')
+    publishers = current_datastore.create_role(name=str(uuid.uuid4()), description='publisher')
+    current_datastore.commit()
+
+    community = OARepoCommunity.create(
+        {'title': 'Community Title',
+         'description': 'Community description'},
+        members_id=members.id,
+        curators_id=curators.id,
+        publishers_id=publishers.id,
+        id_='testing-community')
+    db.session.commit()
