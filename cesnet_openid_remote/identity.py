@@ -8,10 +8,10 @@
 
 """CESNET OIDC Auth backend for OARepo"""
 from datetime import timedelta
+
 from flask import current_app, session, g
-from flask_login import current_user, user_logged_out, user_logged_in
+from flask_login import current_user, user_logged_out
 from flask_principal import identity_loaded, AnonymousIdentity, identity_changed, RoleNeed, UserNeed
-from flask_security.core import _get_principal
 from invenio_oauthclient.models import RemoteAccount
 from invenio_oauthclient.utils import obj_or_import_string
 from werkzeug.local import LocalProxy
@@ -26,11 +26,11 @@ CESNET_OPENID_REMOTE_REFRESH_TIMEDELTA = timedelta(minutes=-5)
 
 sconf = LocalProxy(
     lambda: dict(key=current_app.config.get(
-                    "CESNET_OPENID_REMOTE_SESSION_KEY",
-                    CESNET_OPENID_REMOTE_SESSION_KEY),
-                 refresh=current_app.config.get(
-                    "CESNET_OPENID_REMOTE_REFRESH_TIMEDELTA",
-                    CESNET_OPENID_REMOTE_REFRESH_TIMEDELTA)))
+        "CESNET_OPENID_REMOTE_SESSION_KEY",
+        CESNET_OPENID_REMOTE_SESSION_KEY),
+        refresh=current_app.config.get(
+            "CESNET_OPENID_REMOTE_REFRESH_TIMEDELTA",
+            CESNET_OPENID_REMOTE_REFRESH_TIMEDELTA)))
 
 
 def extend_identity(identity, roles):
