@@ -21,9 +21,7 @@ from werkzeug.local import LocalProxy
 
 from cesnet_openid_remote.constants import OPENIDC_GROUPS_KEY, OPENIDC_CONFIG, OPENIDC_GROUPS_SCOPE
 from cesnet_openid_remote.errors import OAuthCESNETRejectedAccountError
-from cesnet_openid_remote.groups import add_user_role_from_group, validate_group_uri, parse_group_uri, \
-    disconnect_user_role
-from cesnet_openid_remote.identity import extend_identity, disconnect_identity
+from cesnet_openid_remote.proxies import current_cesnet_openid
 
 """Pre-configured remote application for enabling sign in/up with eduID federated accounts."""
 
@@ -44,14 +42,6 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
     def __init__(self):
         """Initialize the remote app."""
         super(CesnetOpenIdRemote, self).__init__()
-
-        self.group_validate = LocalProxy(lambda: obj_or_import_string(
-            current_app.config.get(
-                "OAUTHCLIENT_CESNET_OPENID_GROUP_VALIDATOR", validate_group_uri)))
-
-        self.group_parser = LocalProxy(lambda: obj_or_import_string(
-            current_app.config.get(
-                "OAUTHCLIENT_CESNET_OPENID_GROUP_PARSER", parse_group_uri)))
 
         self.extras_serializer = LocalProxy(lambda: obj_or_import_string(
             current_app.config.get(
@@ -83,30 +73,6 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
         from invenio_oauthclient.handlers.rest import signup_handler
         return signup_handler(remote, *args, **kwargs)
 
-    def _account_info(self, remote, resp) -> dict:
-        """Retrieve remote account information used to find local user.
-        :param remote: The remote application.
-        :param resp: The response.
-        :returns: A dictionary with the user information.
-        """
-        # TODO: check if user is in allowed groups here?
-        return super(CesnetOpenIdRemote, self).account_info(remote, resp)
-
-    def account_info(self, remote, resp) -> dict:
-        """Retrieve remote account information used to find local user."""
-        try:
-            return self._account_info(remote, resp)
-        except OAuthCESNETRejectedAccountError as e:
-            current_app.logger.warning(e.message, exc_info=True)
-            remote_app_config = current_app.config["OAUTHCLIENT_REST_REMOTE_APPS"][
-                remote.name
-            ]
-            return response_handler(
-                remote,
-                remote_app_config["error_redirect_url"],
-                payload=dict(message="Account is not in allowed groups.", code=400),
-            )
-
     def account_setup(self, remote, token, resp):
         """Perform additional setup after user have been logged in."""
         user_info = self.get_userinfo(remote)
@@ -116,12 +82,12 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
             # Put userinfo in extra_data.
             token.remote_account.extra_data = {}
 
-            groups = self.account_roles_and_extra_data(token.remote_account,
+            groups = self.remote_groups_and_extra_data(token.remote_account,
                                                        dict(user_info=user_info, user_id=user_id))
             assert not isinstance(g.identity, AnonymousIdentity)
-            extend_identity(g.identity, groups)
 
             user = token.remote_account.user
+            current_cesnet_openid.sync_user_roles(user, groups)
 
             # Create user <-> external id link.
             oauth_link_external_id(user, dict(id=user_id, method=self.name))
@@ -129,21 +95,16 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
     def fetch_extra_data(self, user_info, user_id):
         """"Fetch extra account data from resource."""
         extra_data = user_info
-        cesnet_groups = []
 
         group_uris = extra_data.pop(OPENIDC_GROUPS_SCOPE, [])
-        group_uris = [gr for gr in group_uris if self.group_validate(gr)]
-        for gi in group_uris:
-            guuid, extra = self.group_parser(gi)
-            if add_user_role_from_group(extra_data.get('email'), guuid, extra):
-                cesnet_groups.append(guuid)
+        group_uris = [u for u in group_uris if current_cesnet_openid.validate_group_uri(u)]
+        extra_data[OPENIDC_GROUPS_KEY] = group_uris
 
-        extra_data[OPENIDC_GROUPS_KEY] = cesnet_groups
         extra_data['external_id'] = user_id
         extra_data['external_method'] = self.name
         return extra_data
 
-    def account_roles_and_extra_data(self, account, resource, refresh_timedelta=None):
+    def remote_groups_and_extra_data(self, account, resource, refresh_timedelta=None):
         """Fetch account roles and extra data from resource if necessary."""
         updated = datetime.utcnow()
         modified_since = updated
@@ -155,7 +116,7 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
         if last_update > modified_since:
             return account.extra_data.get(OPENIDC_GROUPS_KEY, [])
 
-        user_info = resource.get('user_info').__dict__
+        user_info = resource.get('user_info')
         user_id = resource.pop('user_id')
         extra_data = self.extras_serializer(user_info, user_id)
 
@@ -180,11 +141,9 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
         resource = dict(user_info=user_info,
                         user_id=self.get_user_id(remote, email=user_info.email))
 
-        groups = self.account_roles_and_extra_data(account, resource)
-        for guuid in groups:
-            disconnect_user_role(current_user.email, guuid)
-
-        disconnect_identity(g.identity)
+        groups = self.remote_groups_and_extra_data(account, resource)
+        roles = current_cesnet_openid.groups_roles(groups)
+        current_cesnet_openid.remove_user_roles(current_user, roles, reverse=True)
 
         if sub:
             oauth_unlink_external_id({'id': sub, 'method': self.name})

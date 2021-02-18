@@ -1,0 +1,26 @@
+version: '2.3'
+services:
+  db:
+    image: postgres:9.6
+    restart: "always"
+    environment:
+      - "POSTGRES_USER=cesnet-openid-remote"
+      - "POSTGRES_PASSWORD=cesnet-openid-remote"
+      - "POSTGRES_DB=cesnet-openid-remote"
+    ports:
+      - "127.0.0.1:5432:5432"
+  es:
+    image: docker.elastic.co/elasticsearch/elasticsearch-oss:7.3.0
+    restart: "always"
+    environment:
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - discovery.type=single-node
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    mem_limit: 1g
+    ports:
+      - "127.0.0.1:9200:9200"
+      - "127.0.0.1:9300:9300"

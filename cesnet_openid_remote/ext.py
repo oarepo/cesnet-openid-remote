@@ -11,8 +11,10 @@ from invenio_oauthclient.utils import obj_or_import_string
 from invenio_openid_connect.signals import prepare_state_view_data
 
 from . import config
+from .api import CesnetOpenIdRemoteAPI
 from .constants import OPENIDC_CONFIG
 from .state import transform_state_data
+from .remote import InvenioAuthOpenIdRemote
 
 
 class CESNETOpenIDRemote(object):
@@ -27,7 +29,10 @@ class CESNETOpenIDRemote(object):
         """Flask application initialization."""
         self.init_config(app)
         self.connect_signals(app)
+
+        remote = InvenioAuthOpenIdRemote()
         app.extensions['cesnet-openid-remote'] = self
+        app.extensions['cesnet-openid-remote'].api = CesnetOpenIdRemoteAPI(app, remote)
 
     def init_config(self, app):
         """Initialize configuration."""

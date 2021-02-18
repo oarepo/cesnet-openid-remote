@@ -14,7 +14,6 @@ fixtures are available.
 import os
 import shutil
 import tempfile
-import uuid
 
 import pytest
 from flask import Flask
@@ -24,14 +23,15 @@ from invenio_accounts.proxies import current_datastore
 from invenio_db import InvenioDB, db
 from invenio_oauthclient import InvenioOAuthClient, InvenioOAuthClientREST
 from invenio_oauthclient.views.client import rest_blueprint
-from invenio_openid_connect.views import blueprint as openid_blueprint
 from invenio_openid_connect import InvenioOpenIDConnect
+from invenio_openid_connect.views import blueprint as openid_blueprint
 from oarepo_communities import OARepoCommunities
 from oarepo_communities.api import OARepoCommunity
 from sqlalchemy_utils import database_exists, create_database, drop_database
 
 from cesnet_openid_remote import CesnetOpenIdRemote, CESNETOpenIDRemote
 from cesnet_openid_remote.constants import OPENIDC_GROUPS_SCOPE
+from cesnet_openid_remote.models import CesnetGroup
 
 
 @pytest.fixture
@@ -70,7 +70,8 @@ def base_app(request):
         SECURITY_PASSWORD_SCHEMES=['plaintext'],
         APP_ALLOWED_HOSTS=['localhost'],
         USERPROFILES_EXTEND_SECURITY_FORMS=True,
-        SECURITY_SEND_REGISTER_EMAIL=False
+        SECURITY_SEND_REGISTER_EMAIL=False,
+        OAUTHCLIENT_CESNET_OPENID_PROTECTED_ROLES=['admin', 'notextising']
     )
     InvenioDB(base_app)
     InvenioAccounts(base_app)
@@ -119,7 +120,17 @@ def communities_app(app):
 
 
 @pytest.fixture
-def models_fixture(base_app):
+def group_uris(cesnet_groups):
+    """Group URIs fixture."""
+    return {
+        'exists': 'urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098cebb426?displayName=example#perun.cesnet.cz',
+        'new': 'urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098c3bb426?displayName=new#perun.cesnet.cz',
+        'invalid': 'urn:geant:cesnet.cz:group:f0c14f62-b19c-447e-b044-c3098cebb426#perun.cesnet.cz'
+    }
+
+
+@pytest.fixture
+def users_fixture(base_app):
     """Flask app with example data used to test models."""
     with base_app.app_context():
         datastore = base_app.extensions['security'].datastore
@@ -173,22 +184,49 @@ def example_cesnet(request):
         ),
         external_id='abcd1234@einfra.cesnet.cz',
         external_method='CESNET eduID Login',
-        active=True
+        active=True,
+        eduperson_entitlement_extended=[
+            "urn:geant:cesnet.cz:group:f0c14f62-b19c-447e-b044-c3098cebb426#perun.cesnet.cz",
+            "urn:geant:cesnet.cz:group:8ece6adb-8677-4482-9aec-5a556c646389#perun.cesnet.cz",
+            "urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098cebb426?displayName=example#perun.cesnet.cz",
+            "urn:geant:cesnet.cz:groupAttributes:8ece6adb-8677-4482-9aec-5a556c646389?displayName=example:subgroup#perun.cesnet.cz",
+            "urn:geant:cesnet.cz:groupUuid:f0c14f62-b19c-447e-b044-c3098cebb426#perun.cesnet.cz",
+            "urn:geant:cesnet.cz:groupUuid:8ece6adb-8677-4482-9aec-5a556c646389#perun.cesnet.cz",
+            "urn:mace:cesnet.cz:other-namespace-group"
+        ]
     )
 
 
 @pytest.fixture()
 def community():
-    members = current_datastore.create_role(name='f0c14f62-b19c-447e-b044-c3098cebb426', description='member')
-    curators = current_datastore.create_role(name='8ece6adb-8677-4482-9aec-5a556c646389', description='curator')
-    publishers = current_datastore.create_role(name=str(uuid.uuid4()), description='publisher')
     current_datastore.commit()
 
     community = OARepoCommunity.create(
-        {'title': 'Community Title',
-         'description': 'Community description'},
-        members_id=members.id,
-        curators_id=curators.id,
-        publishers_id=publishers.id,
+        {'description': 'Community description'},
+        title='Test',
         id_='testing-community')
     db.session.commit()
+
+    return community
+
+
+@pytest.fixture()
+def protected_roles():
+    return [current_datastore.create_role(name='admin')]
+
+
+@pytest.fixture()
+def cesnet_groups():
+    with db.session.begin_nested():
+        cg1 = CesnetGroup(
+            uuid='f0c14f62-b19c-447e-b044-c3098cebb426',
+            display_name='example',
+            uri='urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098cebb426?displayName=example#perun.cesnet.cz')
+        db.session.add(cg1)
+
+        cg2 = CesnetGroup(
+            uuid='8ece6adb-8677-4482-9aec-5a556c646389',
+            display_name='example:subgroup',
+            uri='urn:geant:cesnet.cz:groupAttributes:8ece6adb-8677-4482-9aec-5a556c646389?displayName=example:subgroup#perun.cesnet.cz')
+        db.session.add(cg2)
+    return [cg1, cg2]

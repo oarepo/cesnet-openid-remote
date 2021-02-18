@@ -17,6 +17,7 @@ from invenio_oauthclient.utils import obj_or_import_string
 from werkzeug.local import LocalProxy
 
 from cesnet_openid_remote.constants import OPENIDC_GROUPS_KEY
+from cesnet_openid_remote.proxies import current_cesnet_openid
 
 CESNET_OPENID_REMOTE_SESSION_KEY = 'identity.cesnet_provides'
 """Name of session key where CESNET roles are stored."""
@@ -33,27 +34,6 @@ sconf = LocalProxy(
             CESNET_OPENID_REMOTE_REFRESH_TIMEDELTA)))
 
 
-def extend_identity(identity, roles):
-    """Extend identity with roles based on CESNET groups."""
-    provides = set(
-        [UserNeed(current_user.email), UserNeed(identity.id)] + [RoleNeed(name) for name in roles]
-    )
-    identity.provides |= provides
-    session[sconf['key']] = provides
-
-
-def disconnect_identity(identity):
-    """Disconnect identity from CESNET groups."""
-    provides = session.pop(sconf['key'], set())
-    identity.provides -= provides
-
-
-@user_logged_out.connect
-def handle_logout(sender, user):
-    """Remove provides and session data from identity."""
-    disconnect_identity(g.identity)
-
-
 @identity_changed.connect
 def on_identity_changed(sender, identity):
     """Store roles in session whenever identity changes.
@@ -61,8 +41,7 @@ def on_identity_changed(sender, identity):
     :param sender: Sender of the signal
     :param identity: The user identity where information are stored.
     """
-    # TODO: find a better way to pass correct class instance here (and avoid circular imports)
-    remote = obj_or_import_string('cesnet_openid_remote.remote.CesnetOpenIdRemote')()
+    remote = current_cesnet_openid.remote_app
 
     if isinstance(identity, AnonymousIdentity):
         return
@@ -75,27 +54,19 @@ def on_identity_changed(sender, identity):
     remote_account = RemoteAccount.get(
         user_id=identity.id, client_id=client_id
     )
-    roles = []
 
+    groups = []
     if remote_account and not logged_in_via_token:
         if sconf['refresh']:
             user_info = remote.get_userinfo(remote)
             resource = dict(user_info=user_info,
                             user_id=remote.get_user_id(remote, email=user_info.email))
-            roles.extend(
-                remote.account_roles_and_extra_data(
-                    remote_account, resource, refresh_timedelta=sconf['refresh']
-                )
+            groups = remote.remote_groups_and_extra_data(
+                remote_account, resource, refresh_timedelta=sconf['refresh']
             )
         else:
-            roles.extend(remote_account.extra_data[OPENIDC_GROUPS_KEY])
+            groups = remote_account.extra_data[OPENIDC_GROUPS_KEY]
     elif remote_account and logged_in_via_token:
-        roles.extend(remote_account.extra_data[OPENIDC_GROUPS_KEY])
+        groups = remote_account.extra_data[OPENIDC_GROUPS_KEY]
 
-    extend_identity(identity, roles)
-
-
-@identity_loaded.connect
-def on_identity_loaded(sender, identity):
-    """Store roles in session whenever identity is loaded."""
-    identity.provides.update(session.get(sconf['key'], []))
+    current_cesnet_openid.sync_user_roles(current_user, groups)
