@@ -67,6 +67,9 @@ setup(
     include_package_data=True,
     platforms='any',
     entry_points={
+        'flask.commands': [
+            'cesnet:group = cesnet_openid_remote.cli:cesnet_group',
+        ],
         'invenio_base.apps': [
             'cesnet_openid_remote = cesnet_openid_remote:CESNETOpenIDRemote',
         ],

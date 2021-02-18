@@ -93,7 +93,7 @@ class CesnetOpenIdRemoteAPI(object):
             db.session.add(cg)
             return cg
 
-    def groups_roles(self, group_uris: list) -> list[Role]:
+    def groups_roles(self, group_uris: list) -> list:
         """Return a list of all Invenio Roles associated with group URIs.
 
             :param group_uris: List of CESNET group URIs
@@ -117,7 +117,7 @@ class CesnetOpenIdRemoteAPI(object):
             group.roles.append(role)
 
     @check_role_protected
-    def rm_group_role(self, group: CesnetGroup, role: Role):
+    def remove_group_role(self, group: CesnetGroup, role: Role):
         """Remove CESNET group from Invenio role.
 
             :param group: CESNET group to be removed

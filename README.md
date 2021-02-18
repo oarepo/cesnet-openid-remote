@@ -16,7 +16,25 @@
 # CESNET OIDC Auth backend for OARepo
 
 This remote backend is appropriate for e.g. a SPA application which communicates
-with Invenio via REST calls.
+with Invenio via REST calls. It also manages mapping of external CESNET (Perun) groups
+onto internal Invenio roles and Invenio user-role synchronization using this mapping.
+
+## Installation
+
+Cesnet OpenID Remote is on PyPI so all you need is:
+
+``` console
+$ pip install cesnet-openid-remote
+```
+
+Then run the following to ensure `cesnet_group` and `cesnet_group_role` mapping database tables
+are created:
+```console
+$ invenio alembic upgrade heads
+```
+
+## Configuration
+
 1. Register a new application with CESNET OIDC Provider. When registering the
    application ensure that the *Redirect URI* points to:
 ```url
@@ -38,6 +56,33 @@ between an eduID account and a user. If no link is found, it will be created.
 Any external Perun groups will be automatically linked to invenio roles on
 each login.
 For more details you can play with a :doc:`working example <examplesapp>`.
+
+If you wish to prevent this module from managing (adding/removing users to/from role)
+certain Invenio roles, configure such roles in:
+
+```python
+OAUTHCLIENT_CESNET_OPENID_PROTECTED_ROLES = ['admin']
+"""Role names that shouldn't be managed/(un)assigned to users by this extension."""
+```
+
+## CLI
+
+To manage CESNET group to Invenio Role mappings you can use the following CLI command group:
+```
+$ invenio cesnet:groups --help
+Usage: invenio cesnet:group [OPTIONS] COMMAND [ARGS]...
+
+  Management commands for CESNET external group mappings.
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  add     Add a CESNET group to Invenio Role.
+  create  Create an external CESNET group.
+  list    List external CESNET groups.
+  remove  Remove a CESNET group from an Invenio Role.
+```
 
 ## Customization
 

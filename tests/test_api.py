@@ -114,18 +114,18 @@ def test_rm_role_from_group(communities_app, cesnet_groups, community, protected
     assert len(group.roles) == 1
 
     # Remove group from assigned roles
-    current_cesnet_openid.rm_group_role(group, roles[0])
+    current_cesnet_openid.remove_group_role(group, roles[0])
     assert len(group.roles) == 0
 
     # Remove group from non assigned role
-    current_cesnet_openid.rm_group_role(group, roles[0])
+    current_cesnet_openid.remove_group_role(group, roles[0])
     assert len(group.roles) == 0
 
     # Test remove from protected role fails miserably
     group.roles.append(protected_roles[0])
     assert protected_roles[0] in group.roles
     with pytest.raises(OAuthCESNETRoleProtected):
-        current_cesnet_openid.rm_group_role(group, protected_roles[0])
+        current_cesnet_openid.remove_group_role(group, protected_roles[0])
 
 
 def test_add_user_roles(communities_app, community, cesnet_groups, protected_roles, users_fixture):
