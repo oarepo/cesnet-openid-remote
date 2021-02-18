@@ -115,6 +115,7 @@ class CesnetOpenIdRemoteAPI(object):
         """
         if role not in group.roles:
             group.roles.append(role)
+            # TODO: find and add to role all remote account users with this group?
 
     @check_role_protected
     def remove_group_role(self, group: CesnetGroup, role: Role):
@@ -126,6 +127,8 @@ class CesnetOpenIdRemoteAPI(object):
         """
         if role in group.roles:
             group.roles.remove(role)
+            # TODO: find and remove from role all remote account users
+            # with this group that haven't any other group assigned to this role?
 
     def add_user_roles(self, user: User, group_roles: list):
         """Assign Invenio roles to user based on his cesnet groups.
