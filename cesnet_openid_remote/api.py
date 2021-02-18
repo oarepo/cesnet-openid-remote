@@ -93,7 +93,7 @@ class CesnetOpenIdRemoteAPI(object):
             db.session.add(cg)
             return cg
 
-    def groups_roles(self, group_uris: list[str]) -> list[Role]:
+    def groups_roles(self, group_uris: list) -> list[Role]:
         """Return a list of all Invenio Roles associated with group URIs.
 
             :param group_uris: List of CESNET group URIs
@@ -127,7 +127,7 @@ class CesnetOpenIdRemoteAPI(object):
         if role in group.roles:
             group.roles.remove(role)
 
-    def add_user_roles(self, user: User, group_roles: list[Role]):
+    def add_user_roles(self, user: User, group_roles: list):
         """Assign Invenio roles to user based on his cesnet groups.
 
             :param user: User instance to be roles assigned to
@@ -138,7 +138,7 @@ class CesnetOpenIdRemoteAPI(object):
             for role in group_roles:
                 current_datastore.add_role_to_user(user, role)
 
-    def remove_user_roles(self, user: User, group_roles: list[Role], reverse=False):
+    def remove_user_roles(self, user: User, group_roles: list, reverse=False):
         """Remove user from any role that is not in group-granted roles.
 
             :param user: User instance to remove roles from
@@ -153,7 +153,7 @@ class CesnetOpenIdRemoteAPI(object):
             for extra in extra_roles:
                 current_datastore.remove_role_from_user(user, extra)
 
-    def sync_user_roles(self, user: User, group_uris: list[str]):
+    def sync_user_roles(self, user: User, group_uris: list):
         """Synchronize user's roles based on his cesnet group URIs."""
 
         roles = self.groups_roles(group_uris)
