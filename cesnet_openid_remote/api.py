@@ -9,10 +9,14 @@
 """CESNET OIDC Auth backend for OARepo"""
 from functools import wraps
 
+import sqlalchemy
 from invenio_accounts.models import Role, User
 from invenio_accounts.proxies import current_datastore
 from invenio_db import db
+from invenio_oauthclient.models import RemoteAccount
+from sqlalchemy import func, cast
 
+from cesnet_openid_remote.constants import OPENIDC_GROUPS_KEY
 from cesnet_openid_remote.errors import OAuthCESNETInvalidGroupURI, OAuthCESNETGroupExists, OAuthCESNETRoleProtected
 from cesnet_openid_remote.groups import validate_group_uri, parse_group_uri
 from cesnet_openid_remote.models import CesnetGroup
@@ -57,8 +61,7 @@ class CesnetOpenIdRemoteAPI(object):
             :param uuid: The unique external identifier of the group
             :returns CesnetGroup: group instance, None if not found
         """
-        with db.session.no_autoflush:
-            return CesnetGroup.query.filter_by(uuid=uuid).first()
+        return CesnetGroup.query.filter_by(uuid=uuid).first()
 
     def find_or_create_group(self, uri: str) -> CesnetGroup:
         """Find a CESNET group by its URI, or create a new one.
@@ -71,6 +74,26 @@ class CesnetOpenIdRemoteAPI(object):
 
         guuid, attrs = self.parse_group_uri(uri)
         return self.find_group(guuid) or self.create_group(uuid=guuid, attrs=attrs, uri=uri)
+
+    @classmethod
+    def remote_accounts(cls, group: CesnetGroup) -> list:
+        """Find all remote accounts that are members of a given cesnet group.
+
+            :param group: CesnetGroup to list all members of
+            :returns list of all group members
+        """
+        if db.session.bind.dialect.name != 'postgresql':
+            group_field = cast(RemoteAccount.extra_data, sqlalchemy.String)
+        else:
+            group_field = func.jsonb_array_elements_text(RemoteAccount.extra_data, OPENIDC_GROUPS_KEY)
+
+        query = RemoteAccount.query.filter(group_field.contains(group.uri))
+        return query.all()
+
+    @classmethod
+    def remote_group_uris(cls, account: RemoteAccount):
+        """Returns list of all CESNET group URIs for a given RemoteAccount."""
+        return account.extra_data[OPENIDC_GROUPS_KEY]
 
     @classmethod
     def create_group(cls, uuid: str, attrs: dict, uri: str) -> CesnetGroup:
@@ -114,8 +137,12 @@ class CesnetOpenIdRemoteAPI(object):
             :returns True if group was assigned, False otherwise
         """
         if role not in group.roles:
-            group.roles.append(role)
-            # TODO: find and add to role all remote account users with this group?
+            with db.session.begin_nested():
+                group.roles.append(role)
+
+                # Find and add to role all remote accounts with this group
+                for ra in self.remote_accounts(group):
+                    self.sync_user_roles(ra.user, self.remote_group_uris(ra))
 
     @check_role_protected
     def remove_group_role(self, group: CesnetGroup, role: Role):
@@ -126,9 +153,13 @@ class CesnetOpenIdRemoteAPI(object):
             :raises OAuthCESNETGroupNotInRole:
         """
         if role in group.roles:
-            group.roles.remove(role)
-            # TODO: find and remove from role all remote account users
-            # with this group that haven't any other group assigned to this role?
+            with db.session.begin_nested():
+                group.roles.remove(role)
+
+                # Find and remove from role all remote account users
+                # with this group that haven't any other group assigned to this role
+                for ra in self.remote_accounts(group):
+                    self.sync_user_roles(ra.user, self.remote_group_uris(ra))
 
     def add_user_roles(self, user: User, group_roles: list):
         """Assign Invenio roles to user based on his cesnet groups.
