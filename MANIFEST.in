@@ -30,3 +30,5 @@ recursive-exclude example *.sh
 recursive-exclude tests *.json
 recursive-exclude examples *.db
 recursive-exclude examples *.sh
+include *.yml
+recursive-include cesnet_openid_remote *.py

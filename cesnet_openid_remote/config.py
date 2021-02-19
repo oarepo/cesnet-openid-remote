@@ -41,6 +41,9 @@ OAUTHCLIENT_CESNET_OPENID_GROUP_PARSER = 'cesnet_openid_remote.groups.parse_grou
 OAUTHCLIENT_CESNET_OPENID_STATE_TRANSFORM = 'cesnet_openid_remote.state.transform_state_data'
 """Function used to validate external group URIs."""
 
+OAUTHCLIENT_CESNET_OPENID_PROTECTED_ROLES = ['admin']
+"""Role names that shouldn't be managed/(un)assigned to users by this extension."""
+
 OAUTHCLIENT_REST_REMOTE_APPS = dict(
     eduid=CesnetOpenIdRemote().remote_app(),
 )

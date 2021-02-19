@@ -13,14 +13,4 @@ from invenio_accounts.proxies import current_datastore
 
 def transform_state_data(user, state):
     """Transforms auth state data where necessary."""
-    if 'oarepo-communities' in current_app.extensions:
-        from oarepo_communities.api import OARepoCommunity
-
-        for role in state['user']['roles']:
-            rol = current_datastore.find_role(role['id'])
-            comm = OARepoCommunity.get_community_from_role(rol)
-            if comm:
-                title = comm.json['title']
-                role['label'] = f'{title} - {rol.description}'
-
     return state

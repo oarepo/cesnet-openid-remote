@@ -20,7 +20,7 @@ OAREPO_VERSION = os.environ.get('OAREPO_VERSION', '3.3.0')
 tests_require = [
     'pydocstyle',
     'isort',
-    'oarepo-communities',
+    'oarepo-communities>=1.1.0',
     'invenio-oauthclient==1.4.0'
 ]
 
@@ -67,6 +67,9 @@ setup(
     include_package_data=True,
     platforms='any',
     entry_points={
+        'flask.commands': [
+            'cesnet:group = cesnet_openid_remote.cli:cesnet_group',
+        ],
         'invenio_base.apps': [
             'cesnet_openid_remote = cesnet_openid_remote:CESNETOpenIDRemote',
         ],
@@ -80,7 +83,12 @@ setup(
         # 'invenio_base.api_blueprints': [],
         # 'invenio_base.blueprints': [],
         # 'invenio_celery.tasks': [],
-        # 'invenio_db.models': [],
+        'invenio_db.models': [
+            'cesnet_openid_remote = cesnet_openid_remote.models',
+        ],
+        'invenio_db.alembic': [
+            'cesnet_openid_remote = cesnet_openid_remote:alembic',
+        ],
         # 'invenio_pidstore.minters': [],
         # 'invenio_records.jsonresolver': [],
     },
