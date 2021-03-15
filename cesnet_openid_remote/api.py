@@ -14,7 +14,7 @@ from invenio_accounts.models import Role, User
 from invenio_accounts.proxies import current_datastore
 from invenio_db import db
 from invenio_oauthclient.models import RemoteAccount
-from sqlalchemy import func, cast
+from sqlalchemy import func, cast, text
 
 from cesnet_openid_remote.constants import OPENIDC_GROUPS_KEY
 from cesnet_openid_remote.errors import OAuthCESNETInvalidGroupURI, OAuthCESNETGroupExists, OAuthCESNETRoleProtected
@@ -84,10 +84,11 @@ class CesnetOpenIdRemoteAPI(object):
         """
         if db.session.bind.dialect.name != 'postgresql':
             group_field = cast(RemoteAccount.extra_data, sqlalchemy.String)
+            query = RemoteAccount.query.filter(group_field.contains(group.uri))
         else:
-            group_field = func.jsonb_array_elements_text(RemoteAccount.extra_data, OPENIDC_GROUPS_KEY)
+            query = RemoteAccount.query.filter(
+                text(f"(extra_data->'{OPENIDC_GROUPS_KEY}')::jsonb ? '{group.uri}'"))
 
-        query = RemoteAccount.query.filter(group_field.contains(group.uri))
         return query.all()
 
     @classmethod
