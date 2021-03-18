@@ -52,7 +52,7 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
         conf = super(CesnetOpenIdRemote, self).remote_app()
         conf.update(dict(
             response_handler=default_remote_response_handler,
-            authorized_redirect_url='/api/oauth/complete/',
+            authorized_redirect_url='/oauth/complete/',
             error_redirect_url='/error',
             disconnect_redirect_url='/logged-out',
             logout_url='https://login.cesnet.cz/oidc/endsession'))

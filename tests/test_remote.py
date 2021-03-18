@@ -41,7 +41,7 @@ def _login_user(app, example_cesnet, c):
         remote_app='cesnet', code='test',
         state=get_state('cesnet')))
     assert resp.status_code == 302
-    assert resp.location == 'http://localhost/api/oauth/complete/?message=Successfully+authorized.&code=200'
+    assert resp.location == 'http://localhost/oauth/complete/?message=Successfully+authorized.&code=200'
 
 
 def test_fetch_extra_data(app, example_cesnet, cesnet_groups, users_fixture):
