@@ -9,18 +9,18 @@
 """CESNET OIDC Auth backend for OARepo."""
 from datetime import datetime
 
-from flask import current_app, g
+from flask import current_app, g, session
 from flask_login import current_user
 from flask_principal import AnonymousIdentity
 from invenio_db import db
+from invenio_oauthclient.handlers import token_getter
 from invenio_oauthclient.handlers.rest import response_handler, default_remote_response_handler
-from invenio_oauthclient.models import RemoteAccount
+from invenio_oauthclient.models import RemoteAccount, RemoteToken
 from invenio_oauthclient.utils import oauth_unlink_external_id, oauth_link_external_id, obj_or_import_string
 from invenio_openid_connect import InvenioAuthOpenIdRemote
 from werkzeug.local import LocalProxy
 
 from cesnet_openid_remote.constants import OPENIDC_GROUPS_KEY, OPENIDC_CONFIG, OPENIDC_GROUPS_SCOPE
-from cesnet_openid_remote.errors import OAuthCESNETRejectedAccountError
 from cesnet_openid_remote.proxies import current_cesnet_openid
 
 """Pre-configured remote application for enabling sign in/up with eduID federated accounts."""
@@ -58,13 +58,42 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
             logout_url='https://login.cesnet.cz/oidc/endsession'))
         return conf
 
+    def _account_setup(self, remote, token, refresh=False):
+        if refresh:
+            session.pop('user_info')
+
+        user_info = self.get_userinfo(remote)
+        user_id = self.get_user_id(remote, email=user_info.email)
+
+        with db.session.begin_nested():
+            # Update extra_data.
+            groups = self.remote_groups_and_extra_data(token.remote_account,
+                                                       dict(user_info=user_info, user_id=user_id))
+            assert not isinstance(g.identity, AnonymousIdentity)
+
+            user = token.remote_account.user
+            current_cesnet_openid.sync_user_roles(user, groups)
+
+        return user_id, user, groups
+
     def handle_authorized(self, resp, remote, *args, **kwargs):
         """Handle user authorization.
         :param resp: User authorization response
         :param remote: The remote application
         """
         from invenio_oauthclient.handlers.rest import authorized_signup_handler
-        return authorized_signup_handler(resp, remote, *args, **kwargs)
+        response = authorized_signup_handler(resp, remote, *args, **kwargs)
+        token = RemoteToken.get_by_token(client_id=remote.consumer_key,
+                                         access_token=token_getter(remote)[0])
+
+        if token:
+            last_update = token.remote_account.extra_data.get('updated', datetime.utcnow())
+            refresh_timedelta = current_app.config['CESNET_OPENID_REMOTE_REFRESH_TIMEDELTA']
+
+            if last_update < (datetime.utcnow() + refresh_timedelta).isoformat():
+                self._account_setup(remote, token, refresh=True)
+                db.session.commit()
+        return response
 
     def handle_signup(self, remote, *args, **kwargs):
         """Handle signup.
@@ -75,22 +104,11 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
 
     def account_setup(self, remote, token, resp):
         """Perform additional setup after user have been logged in."""
-        user_info = self.get_userinfo(remote)
-        user_id = self.get_user_id(remote, email=user_info.email)
+        token.remote_account.extra_data = {}
+        user_id, user, _ = self._account_setup(remote, token)
 
-        with db.session.begin_nested():
-            # Put userinfo in extra_data.
-            token.remote_account.extra_data = {}
-
-            groups = self.remote_groups_and_extra_data(token.remote_account,
-                                                       dict(user_info=user_info, user_id=user_id))
-            assert not isinstance(g.identity, AnonymousIdentity)
-
-            user = token.remote_account.user
-            current_cesnet_openid.sync_user_roles(user, groups)
-
-            # Create user <-> external id link.
-            oauth_link_external_id(user, dict(id=user_id, method=self.name))
+        # Create user <-> external id link.
+        oauth_link_external_id(user, dict(id=user_id, method=self.name))
 
     def fetch_extra_data(self, user_info, user_id):
         """"Fetch extra account data from resource."""
