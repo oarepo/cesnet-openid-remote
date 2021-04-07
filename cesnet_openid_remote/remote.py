@@ -86,12 +86,13 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
         token = RemoteToken.get_by_token(client_id=remote.consumer_key,
                                          access_token=token_getter(remote)[0])
 
-        last_update = token.remote_account.extra_data.get('updated', datetime.utcnow())
-        refresh_timedelta = current_app.config['CESNET_OPENID_REMOTE_REFRESH_TIMEDELTA']
+        if token:
+            last_update = token.remote_account.extra_data.get('updated', datetime.utcnow())
+            refresh_timedelta = current_app.config['CESNET_OPENID_REMOTE_REFRESH_TIMEDELTA']
 
-        if token and last_update < (datetime.utcnow() + refresh_timedelta).isoformat():
-            self._account_setup(remote, token, refresh=True)
-            db.session.commit()
+            if last_update < (datetime.utcnow() + refresh_timedelta).isoformat():
+                self._account_setup(remote, token, refresh=True)
+                db.session.commit()
         return response
 
     def handle_signup(self, remote, *args, **kwargs):
