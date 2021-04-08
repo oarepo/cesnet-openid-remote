@@ -32,3 +32,6 @@ recursive-exclude examples *.db
 recursive-exclude examples *.sh
 include *.yml
 recursive-include cesnet_openid_remote *.py
+recursive-exclude tests *
+recursive-exclude examples *
+recursive-exclude .github *
