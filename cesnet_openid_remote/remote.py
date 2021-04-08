@@ -87,7 +87,7 @@ class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
                                          access_token=token_getter(remote)[0])
 
         if token:
-            last_update = token.remote_account.extra_data.get('updated', datetime.utcnow())
+            last_update = token.remote_account.extra_data.get('updated', datetime.utcnow().isoformat())
             refresh_timedelta = current_app.config['CESNET_OPENID_REMOTE_REFRESH_TIMEDELTA']
 
             if last_update < (datetime.utcnow() + refresh_timedelta).isoformat():
