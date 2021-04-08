@@ -42,7 +42,7 @@ install_requires = [
     'invenio-openid-connect>=2.1.0',
 ]
 
-packages = find_packages()
+packages = find_packages(exclude=['examples', 'tests'])
 
 
 # Get the version string. Cannot be done with import!
