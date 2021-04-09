@@ -39,6 +39,7 @@ setup_requires = [
 ]
 
 install_requires = [
+    'urnparse>=0.2.0',
     'invenio-openid-connect>=2.1.0',
 ]
 

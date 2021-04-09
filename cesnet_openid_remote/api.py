@@ -71,8 +71,8 @@ class CesnetOpenIdRemoteAPI(object):
         """
         if not validate_group_uri(uri):
             raise OAuthCESNETInvalidGroupURI(uri)
-
         guuid, attrs = self.parse_group_uri(uri)
+        print(guuid, attrs)
         return self.find_group(guuid) or self.create_group(uuid=guuid, attrs=attrs, uri=uri)
 
     @classmethod

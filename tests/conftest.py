@@ -123,8 +123,8 @@ def communities_app(app):
 def group_uris(cesnet_groups):
     """Group URIs fixture."""
     return {
-        'exists': 'urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098cebb426?displayName=example#perun.cesnet.cz',
-        'new': 'urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098c3bb426?displayName=new#perun.cesnet.cz',
+        'exists': 'urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098cebb426?=displayName=example#perun.cesnet.cz',
+        'new': 'urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098c3bb426?=displayName=new#perun.cesnet.cz',
         'invalid': 'urn:geant:cesnet.cz:group:f0c14f62-b19c-447e-b044-c3098cebb426#perun.cesnet.cz'
     }
 
@@ -188,8 +188,8 @@ def example_cesnet(request):
         eduperson_entitlement_extended=[
             "urn:geant:cesnet.cz:group:f0c14f62-b19c-447e-b044-c3098cebb426#perun.cesnet.cz",
             "urn:geant:cesnet.cz:group:8ece6adb-8677-4482-9aec-5a556c646389#perun.cesnet.cz",
-            "urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098cebb426?displayName=example#perun.cesnet.cz",
-            "urn:geant:cesnet.cz:groupAttributes:8ece6adb-8677-4482-9aec-5a556c646389?displayName=example:subgroup#perun.cesnet.cz",
+            "urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098cebb426?=displayName=example#perun.cesnet.cz",
+            "urn:geant:cesnet.cz:groupAttributes:8ece6adb-8677-4482-9aec-5a556c646389?=displayName=example:subgroup#perun.cesnet.cz",
             "urn:geant:cesnet.cz:groupUuid:f0c14f62-b19c-447e-b044-c3098cebb426#perun.cesnet.cz",
             "urn:geant:cesnet.cz:groupUuid:8ece6adb-8677-4482-9aec-5a556c646389#perun.cesnet.cz",
             "urn:mace:cesnet.cz:other-namespace-group"
@@ -221,12 +221,12 @@ def cesnet_groups():
         cg1 = CesnetGroup(
             uuid='f0c14f62-b19c-447e-b044-c3098cebb426',
             display_name='example',
-            uri='urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098cebb426?displayName=example#perun.cesnet.cz')
+            uri='urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098cebb426?=displayName=example#perun.cesnet.cz')
         db.session.add(cg1)
 
         cg2 = CesnetGroup(
             uuid='8ece6adb-8677-4482-9aec-5a556c646389',
             display_name='example:subgroup',
-            uri='urn:geant:cesnet.cz:groupAttributes:8ece6adb-8677-4482-9aec-5a556c646389?displayName=example:subgroup#perun.cesnet.cz')
+            uri='urn:geant:cesnet.cz:groupAttributes:8ece6adb-8677-4482-9aec-5a556c646389?=displayName=example:subgroup#perun.cesnet.cz')
         db.session.add(cg2)
     return [cg1, cg2]
