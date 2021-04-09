@@ -20,11 +20,11 @@ CESNET_OPENIDC_CONFIG = dict(
     scope=f'openid email profile {OPENIDC_GROUPS_SCOPE} isCesnetEligibleLastSeen'
 )
 
-CESNET_OPENID_REMOTE_REFRESH_TIMEDELTA = timedelta(minutes=-5)
+CESNET_OPENID_REMOTE_REFRESH_TIMEDELTA = timedelta(minutes=-1)
 """Default interval for refreshing user's extra data (e.g. groups)."""
 
-CESNET_OPENID_REMOTE_GROUP_PREFIX = 'urn:geant:cesnet.cz:'
-"""Default prefix of group attribute URIs."""
+CESNET_OPENID_REMOTE_GROUP_REALM = 'cesnet.cz'
+"""Default realm of group attribute URNs."""
 
 CESNET_OPENID_REMOTE_GROUP_AUTHORITY = 'perun.cesnet.cz'
 """Default authority that issues the group attribute URIs."""

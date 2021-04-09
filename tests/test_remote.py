@@ -7,15 +7,13 @@
 # details.
 
 """Module tests."""
-from flask import url_for, g, session
-from flask_security import login_user, logout_user
+from flask import url_for
 from invenio_accounts.models import Role
 from invenio_accounts.proxies import current_datastore
 from invenio_oauthclient.models import RemoteAccount
 from invenio_openid_connect.utils import get_dict_from_response
 
 from cesnet_openid_remote import CesnetOpenIdRemote
-from cesnet_openid_remote.config import CESNET_OPENID_REMOTE_SESSION_KEY
 from cesnet_openid_remote.constants import OPENIDC_GROUPS_KEY
 from cesnet_openid_remote.models import CesnetGroup
 from tests.helpers import mock_response, mock_remote_get, get_state
@@ -59,8 +57,8 @@ def test_fetch_extra_data(app, example_cesnet, cesnet_groups, users_fixture):
     # Test only valid group URIs remained in extra_data
     assert len(extra_data[OPENIDC_GROUPS_KEY]) == 2
     assert set(extra_data[OPENIDC_GROUPS_KEY]) == {
-        'urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098cebb426?displayName=example#perun.cesnet.cz',
-        'urn:geant:cesnet.cz:groupAttributes:8ece6adb-8677-4482-9aec-5a556c646389?displayName=example:subgroup#perun.cesnet.cz'
+        'urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098cebb426?=displayName=example#perun.cesnet.cz',
+        'urn:geant:cesnet.cz:groupAttributes:8ece6adb-8677-4482-9aec-5a556c646389?=displayName=example:subgroup#perun.cesnet.cz'
     }
 
     assert extra_data['external_id'] == 'abcd1234@einfra.cesnet.cz'
@@ -83,8 +81,8 @@ def test_remote_groups_and_extra_data(app, example_cesnet, users_fixture):
         assert groups
         assert len(groups) == 2
         assert set(groups) == {
-            'urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098cebb426?displayName=example#perun.cesnet.cz',
-            'urn:geant:cesnet.cz:groupAttributes:8ece6adb-8677-4482-9aec-5a556c646389?displayName=example:subgroup#perun.cesnet.cz'
+            'urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098cebb426?=displayName=example#perun.cesnet.cz',
+            'urn:geant:cesnet.cz:groupAttributes:8ece6adb-8677-4482-9aec-5a556c646389?=displayName=example:subgroup#perun.cesnet.cz'
         }
         assert OPENIDC_GROUPS_KEY in ra.extra_data
         assert ra.extra_data
