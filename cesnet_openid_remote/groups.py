@@ -13,7 +13,7 @@ from urnparse import URN8141, InvalidURNFormatError
 from werkzeug.local import LocalProxy
 
 CESNET_OPENID_REMOTE_GROUP_REALM = 'cesnet.cz'
-"""Default prefix of group attribute URNs."""
+"""Default realm of group attribute URNs."""
 
 CESNET_OPENID_REMOTE_GROUP_AUTHORITY = 'perun.cesnet.cz'
 """Default authority that issues the group attribute URIs."""
