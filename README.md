@@ -69,7 +69,7 @@ OAUTHCLIENT_CESNET_OPENID_PROTECTED_ROLES = ['admin']
 
 To manage CESNET group to Invenio Role mappings you can use the following CLI command group:
 ```
-$ invenio cesnet:groups --help
+$ invenio cesnet:group --help
 Usage: invenio cesnet:group [OPTIONS] COMMAND [ARGS]...
 
   Management commands for CESNET external group mappings.
