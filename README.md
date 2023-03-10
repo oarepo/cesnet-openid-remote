@@ -71,10 +71,10 @@ OAUTHCLIENT_CESNET_OPENID_PROTECTED_ROLES = ['admin']
 5. Add the remote application to the site's `invenio.cfg`:
 
 ```py
-from cesnet_openid_remote import perun
+from cesnet_openid_remote import remote
 
 OAUTHCLIENT_REMOTE_APPS = {
-    "perun":perun.REMOTE_APP
+    "perun": remote.REMOTE_APP
 }  # configure external login providers
 ```
 
@@ -119,7 +119,7 @@ OAUTHCLIENT_CESNET_OPENID_GROUP_PARSER = 'cesnet_openid_remote.groups.parse_grou
 Further documentation is available on
 https://cesnet-openid-remote.readthedocs.io/
 
-Copyright (C) 2021 CESNET.
+Copyright (C) 2023 CESNET.
 
 CESNET-OpenID-Remote is free software; you can redistribute it and/or
 modify it under the terms of the MIT License; see LICENSE file for more

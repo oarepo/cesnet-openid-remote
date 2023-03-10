@@ -39,9 +39,9 @@ class CesnetOAuthSettingsHelper(OAuthSettingsHelper):
         self._handlers = dict(
             authorized_handler="invenio_oauthclient.handlers:authorized_signup_handler",
             signup_handler=dict(
-                info="cesnet_openid_remote.perun:account_info",
-                info_serializer="cesnet_openid_remote.perun:account_info_serializer",
-                setup="cesnet_openid_remote.perun:account_setup",
+                info="cesnet_openid_remote.remote:account_info",
+                info_serializer="cesnet_openid_remote.remote:account_info_serializer",
+                setup="cesnet_openid_remote.remote:account_setup",
                 view="invenio_oauthclient.handlers:signup_handler",
             ),
         )
@@ -49,9 +49,9 @@ class CesnetOAuthSettingsHelper(OAuthSettingsHelper):
         self._rest_handlers = dict(
             authorized_handler="invenio_oauthclient.handlers.rest:authorized_signup_handler",
             signup_handler=dict(
-                info="cesnet_openid_remote.perun:account_info",
-                info_serializer="cesnet_openid_remote.perun:account_info_serializer",
-                setup="cesnet_openid_remote.perun:account_setup",
+                info="cesnet_openid_remote.remote:account_info",
+                info_serializer="cesnet_openid_remote.remote:account_info_serializer",
+                setup="cesnet_openid_remote.remote:account_setup",
                 view="invenio_oauthclient.handlers.rest:signup_handler",
             ),
             response_handler="invenio_oauthclient.handlers.rest:default_remote_response_handler",
