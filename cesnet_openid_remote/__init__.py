@@ -8,7 +8,6 @@
 
 """CESNET OIDC Auth backend for OARepo"""
 
-from . import remote
 from .version import __version__
 
-__all__ = ('__version__', 'remote')
+__all__ = ('__version__',)
