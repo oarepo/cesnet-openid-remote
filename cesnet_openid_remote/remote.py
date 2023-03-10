@@ -1,3 +1,11 @@
+# -*- coding: utf-8 -*-
+#
+# Copyright (C) 2023 CESNET.
+#
+# CESNET-OpenID-Remote is free software; you can redistribute it and/or
+# modify it under the terms of the MIT License; see LICENSE file for more
+# details.
+
 import datetime
 from invenio_db import db
 import jwt
@@ -8,10 +16,8 @@ from invenio_oauthclient.contrib.settings import OAuthSettingsHelper
 from invenio_oauthclient.utils import oauth_link_external_id
 from invenio_oauthclient.signals import account_info_received
 
-class PerunOAuthSettingsHelper(OAuthSettingsHelper):
-    """
-    Default configuration for Perun OAuth provider.
-    """
+class CesnetOAuthSettingsHelper(OAuthSettingsHelper):
+    """CESNET OIDC Remote Auth backend for OARepo."""
 
     def __init__(self):
         access_token_url = "https://login.cesnet.cz/oidc/token"
@@ -33,9 +39,9 @@ class PerunOAuthSettingsHelper(OAuthSettingsHelper):
         self._handlers = dict(
             authorized_handler="invenio_oauthclient.handlers:authorized_signup_handler",
             signup_handler=dict(
-                info="perun_openid_remote.perun:account_info",
-                info_serializer="perun_openid_remote.perun:account_info_serializer",
-                setup="perun_openid_remote.perun:account_setup",
+                info="cesnet_openid_remote.perun:account_info",
+                info_serializer="cesnet_openid_remote.perun:account_info_serializer",
+                setup="cesnet_openid_remote.perun:account_setup",
                 view="invenio_oauthclient.handlers:signup_handler",
             ),
         )
@@ -43,9 +49,9 @@ class PerunOAuthSettingsHelper(OAuthSettingsHelper):
         self._rest_handlers = dict(
             authorized_handler="invenio_oauthclient.handlers.rest:authorized_signup_handler",
             signup_handler=dict(
-                info="perun_openid_remote.perun:account_info",
-                info_serializer="perun_openid_remote.perun:account_info_serializer",
-                setup="perun_openid_remote.perun:account_setup",
+                info="cesnet_openid_remote.perun:account_info",
+                info_serializer="cesnet_openid_remote.perun:account_info_serializer",
+                setup="cesnet_openid_remote.perun:account_setup",
                 view="invenio_oauthclient.handlers.rest:signup_handler",
             ),
             response_handler="invenio_oauthclient.handlers.rest:default_remote_response_handler",
@@ -55,20 +61,20 @@ class PerunOAuthSettingsHelper(OAuthSettingsHelper):
         )
 
     def get_handlers(self):
-        """Return Perun auth handlers."""
+        """Return CESNET auth handlers."""
         return self._handlers
 
     def get_rest_handlers(self):
-        """Return Perun auth REST handlers."""
+        """Return CESNET auth REST handlers."""
         return self._rest_handlers
 
 
-_perun_app = PerunOAuthSettingsHelper()
+_cesnet_app = CesnetOAuthSettingsHelper()
 
 """
-Perun OpenID remote app.
+CESNET OpenID remote app.
 """
-REMOTE_APP = _perun_app.remote_app
+REMOTE_APP = _cesnet_app.remote_app
 
 def account_info_serializer(remote, resp):
     """
@@ -173,7 +179,6 @@ def autocreate_user(remote, token=None, response=None,
         finally:
             db.session.commit()
         
-        # the user now has id
         user_identity = UserIdentity(id=id, method=method, id_user=user.id)
         try:
             db.session.add(user_identity)

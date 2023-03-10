@@ -6,8 +6,9 @@
 # modify it under the terms of the MIT License; see LICENSE file for more
 # details.
 
-"""CESNET OIDC Auth backend for OARepo"""
+"""Version information for CESNET-OpenID-Remote.
+This file is imported by ``cesnet_openid_remote.__init__``,
+and parsed by ``setup.py``.
+"""
 
-from .version import __version__
-
-__all__ = ('__version__')
+__version__ = '2.1.5'

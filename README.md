@@ -27,6 +27,9 @@ Cesnet OpenID Remote is on PyPI so all you need is:
 $ pip install cesnet-openid-remote
 ```
 
+> **Warning**
+> The following section is not supported in the current version.
+
 Then run the following to ensure `cesnet_group` and `cesnet_group_role` mapping database tables
 are created:
 ```console
@@ -65,7 +68,20 @@ OAUTHCLIENT_CESNET_OPENID_PROTECTED_ROLES = ['admin']
 """Role names that shouldn't be managed/(un)assigned to users by this extension."""
 ```
 
+5. Add the remote application to the site's `invenio.cfg`:
+
+```py
+from cesnet_openid_remote import perun
+
+OAUTHCLIENT_REMOTE_APPS = {
+    "perun":perun.REMOTE_APP
+}  # configure external login providers
+```
+
 ## CLI
+
+> **Warning**
+> The following section is not supported in the current version.
 
 To manage CESNET group to Invenio Role mappings you can use the following CLI command group:
 ```
@@ -85,6 +101,9 @@ Commands:
 ```
 
 ## Customization
+
+> **Warning**
+> The following section is not supported in the current version.
 
 To customize group handling and validation, refer to your custom validation and parse
 functions using the following config values:
