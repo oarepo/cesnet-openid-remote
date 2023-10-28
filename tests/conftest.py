@@ -10,10 +10,13 @@ from invenio_communities.communities.records.api import Community
 from invenio_communities.proxies import current_communities
 from oarepo_communities.cf.aai import AAIMappingCF
 
+from cesnet_openid_remote import remote
+
 
 @pytest.fixture(scope="module")
 def create_app(instance_path, entry_points):
     """Application factory fixture."""
+
     return create_api
 
 
@@ -52,10 +55,13 @@ def app_config(app_config):
 
     app_config["CACHE_TYPE"] = "SimpleCache"  # Flask-Caching related configs
     app_config["CACHE_DEFAULT_TIMEOUT"] = 300
+
+    app_config["OAUTHCLIENT_REMOTE_APPS"] = {"eduid": remote.REMOTE_APP}
+    app_config["PERUN_APP_CREDENTIALS_CONSUMER_KEY"] = "lalala"
     return app_config
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def minimal_community():
     """Minimal community metadata."""
     return {
@@ -70,7 +76,7 @@ def minimal_community():
     }
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def minimal_community2(minimal_community):
     edited = copy.deepcopy(minimal_community)
     edited["slug"] = "comm2"
@@ -115,12 +121,12 @@ def community_factory(community_service):
     return _community
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def community(community_factory, users, community_service, minimal_community, location):
     return community_factory(users["owner"].identity, minimal_community)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def community2(
     community_factory, users, community_service, minimal_community2, location
 ):
@@ -128,23 +134,21 @@ def community2(
     return community_factory(users["owner"].identity, minimal_community2)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def init_cf(base_app):
     result = base_app.test_cli_runner().invoke(
         create_communities_custom_field, ["-f", "aai_mapping"]
     )
     assert result.exit_code == 0
+    Community.index.refresh()
+
+
+@pytest.fixture(scope="module")
+def aai_mapping_example_dict():
+    return [{"role": "curator", "aai_group": "test_community:curator"}]
 
 
 @pytest.fixture(scope="function")
-def aai_mapping_example_dict():
-    return {
-        "curator": {"groups": ["development_test:curator"]},
-        "reader": {"groups": ["development_test:reader"]},
-    }
-
-
-@pytest.fixture
 def community_with_aai_mapping_cf(
     users,
     community_service,
@@ -161,7 +165,7 @@ def community_with_aai_mapping_cf(
     return community
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def community2_with_aai_mapping_cf(
     users,
     community_service,
@@ -171,8 +175,8 @@ def community2_with_aai_mapping_cf(
     init_cf,
 ):
     edited = copy.deepcopy(aai_mapping_example_dict)
-    edited["curator"]["groups"] = ["development_test:curator"]
-    minimal_community2["custom_fields"]["aai_mapping"] = aai_mapping_example_dict
+    edited.append({"role": "curator", "aai_group": "alt_test_community:curator"})
+    minimal_community2["custom_fields"]["aai_mapping"] = edited
     community = community_service.update(
         system_identity, community2["id"], minimal_community2
     )
@@ -185,7 +189,7 @@ def return_userinfo_curator():
     def _return_userinfo(val):
         if val == "https://login.cesnet.cz/oidc/userinfo":
             usrinfo_obj = Mock()
-            usrinfo_obj.data = {"eduperson_entitlement": ["development_test:curator"]}
+            usrinfo_obj.data = {"eduperson_entitlement": ["test_community:curator"]}
             return usrinfo_obj
 
     return _return_userinfo
@@ -198,8 +202,8 @@ def return_userinfo_two_communities():
             usrinfo_obj = Mock()
             usrinfo_obj.data = {
                 "eduperson_entitlement": [
-                    "development_test:curator",
-                    "development_alt:curator",
+                    "test_community:curator",
+                    "alt_test_community:curator",
                 ]
             }
             return usrinfo_obj
@@ -214,8 +218,8 @@ def return_userinfo_both():
             usrinfo_obj = Mock()
             usrinfo_obj.data = {
                 "eduperson_entitlement": [
-                    "development_test:curator",
-                    "development_test:reader",
+                    "test_community:curator",
+                    "test_community:reader",
                 ]
             }
             return usrinfo_obj

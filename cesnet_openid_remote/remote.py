@@ -14,8 +14,10 @@ from invenio_db import db
 from invenio_oauthclient import current_oauthclient
 from invenio_oauthclient.contrib.settings import OAuthSettingsHelper
 from invenio_oauthclient.signals import account_info_received
-from invenio_oauthclient.utils import oauth_get_user, oauth_link_external_id
-from oarepo_communities.proxies import current_communities_aai_mapping
+from invenio_oauthclient.utils import oauth_link_external_id
+
+from cesnet_openid_remote.communities import account_info_link_perun_groups, \
+    link_perun_groups
 
 
 class CesnetOAuthSettingsHelper(OAuthSettingsHelper):
@@ -150,6 +152,8 @@ def account_setup(remote, token, resp):
         # Create user <-> external id link.
         oauth_link_external_id(user, {"id": decoded_token["sub"], "method": "perun"})
 
+    link_perun_groups(remote, user)
+
 
 # During overlay initialization.
 @account_info_received.connect
@@ -209,104 +213,4 @@ def autocreate_user(remote, token=None, response=None, account_info=None):
             db.session.commit()
 
 
-from invenio_access.permissions import system_identity
-from invenio_communities import current_communities
-from invenio_communities.members.errors import AlreadyMemberError
-from invenio_oauthclient.handlers.utils import token_getter
-from invenio_search.engine import dsl
-
-"""
-general_flow:
-external_ids = get_external_identifiers()
-relevant_communities = get_relevant_communities()
-result = add_to_communities_from_external()
-"""
-
-
-def link_perun_groups(remote, *, token, response, account_info):
-    def add_community_role(community, community_role):
-        data = {
-            "role": community_role,
-            "members": [{"type": "user", "id": str(user.id)}],
-        }
-        try:
-            current_communities.service.members.add(
-                system_identity, community["id"], data
-            )
-        except AlreadyMemberError:
-            pass
-
-    def remove_community_role_from_repository(community_id, community_role):
-        data = {"members": [{"type": "user", "id": str(user.id)}]}
-        current_communities.service.members.delete(system_identity, community_id, data)
-
-    user = oauth_get_user(
-        remote.consumer_key,
-        account_info=account_info,
-        access_token=token_getter(remote)[0],
-    )
-
-    def get_user_perun_groups():
-        user_info = remote.get(f"{remote.base_url}userinfo")
-        try:
-            return set(user_info.data["eduperson_entitlement"])
-        except (AttributeError, KeyError):
-            return set()
-
-    user_perun_groups = get_user_perun_groups()
-
-    def get_all_communities():
-        # todo max_records=150?
-        communities = current_communities.service.read_all(
-            system_identity, fields=["slug", "id", "featured", "custom_fields"]
-        )
-        communities = list(communities.hits)
-        return communities
-
-    communities = get_all_communities()
-    for community in communities:
-        # todo use search query instead?
-        # or at least cache results based on user and perun groups
-        for community_role, groups in community["custom_fields"]["aai_mapping"].items():
-            for group in groups["groups"]:
-                if group in user_perun_groups:
-                    add_community_role(community, community_role)
-                    break
-
-    def get_user_community_roles():
-        members_service = current_communities.service.members
-        search = members_service._search(
-            "search",
-            system_identity,
-            {},
-            None,
-            extra_filter=dsl.Q("term", **{"user.id": str(user.id)}),
-        )
-
-        result = search.execute()
-        ret = []
-        for hit in result:
-            ret.append((hit["community_id"], hit["role"]))
-        return ret
-
-    community_roles = get_user_community_roles()
-    for community_id, role in community_roles:
-        aai_mapping = current_communities_aai_mapping(community_id)
-        ok = False
-        try:
-            required_perun_groups = aai_mapping[role][
-                "groups"
-            ]  # user must be in at least one perun group defined in the mapping to have the role
-            for group in required_perun_groups:
-                if group in user_perun_groups:
-                    ok = True
-                    break
-        except KeyError:
-            pass  # ok is false
-        if not ok:
-            remove_community_role_from_repository(community_id, role)
-
-
-from invenio_oauthclient.signals import account_info_received
-
-account_info_received.connect(link_perun_groups)
+account_info_received.connect(account_info_link_perun_groups)

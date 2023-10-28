@@ -11,4 +11,4 @@ This file is imported by ``cesnet_openid_remote.__init__``,
 and parsed by ``setup.py``.
 """
 
-__version__ = '3.0.0'
+__version__ = "3.0.0"
