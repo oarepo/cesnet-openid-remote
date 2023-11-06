@@ -171,7 +171,6 @@ def test_two_communities(
 def test_aai_mapping_group_facet(
     db, community_with_aai_mapping_cf, community2_with_aai_mapping_cf, search_clear
 ):
-    # todo doesn't seem to work correctly for now, returns communities without queried roles too
     mapped_communities = get_mapped_communities(
         {
             "alt_test_community:curator",

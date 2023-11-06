@@ -44,7 +44,7 @@ def add_user_community_membership(community_id, community_role, user):
 
 def get_mapped_communities(perun_groups):
     communities = current_communities.service.scan(
-        system_identity, params={"facets": {"aai_mapping_group": perun_groups}}
+        system_identity, params={"facets": {"aai_mapping_group": list(perun_groups)}}
     )
     return {
         community["id"]: community["custom_fields"]["aai_mapping"]

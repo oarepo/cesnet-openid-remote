@@ -32,6 +32,10 @@ def member_service(community_service):
     return community_service.members
 
 
+from invenio_communities.communities.services import facets
+from invenio_records_resources.services.records.facets import TermsFacet
+
+
 @pytest.fixture(scope="module")
 def app_config(app_config):
     # Custom fields
@@ -58,6 +62,32 @@ def app_config(app_config):
 
     app_config["OAUTHCLIENT_REMOTE_APPS"] = {"eduid": remote.REMOTE_APP}
     app_config["PERUN_APP_CREDENTIALS_CONSUMER_KEY"] = "lalala"
+
+    app_config["COMMUNITIES_SEARCH"] = {
+        "facets": ["type", "visibility", "aai_mapping_group"],
+        "sort": ["bestmatch", "newest", "oldest"],
+    }
+    app_config["COMMUNITIES_FACETS"] = {
+        "type": {
+            "facet": facets.type,
+            "ui": {
+                "field": "type",
+            },
+        },
+        "visibility": {
+            "facet": facets.visibility,
+            "ui": {
+                "field": "visibility",
+            },
+        },
+        "aai_mapping_group": {
+            "facet": TermsFacet(
+                field="custom_fields.aai_mapping.aai_group",
+                label="AAI Group",
+            ),
+            "ui": {"field": "aai_mapping.aai_group"},
+        },
+    }
     return app_config
 
 
