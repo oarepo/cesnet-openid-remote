@@ -1,178 +1,216 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2021 CESNET.
+# Copyright (C) 2023 CESNET.
 #
 # CESNET-OpenID-Remote is free software; you can redistribute it and/or
 # modify it under the terms of the MIT License; see LICENSE file for more
 # details.
 
-"""CESNET OIDC Auth backend for OARepo."""
-from datetime import datetime
+import datetime
 
-from flask import current_app, g, session
-from flask_login import current_user
-from flask_principal import AnonymousIdentity
+import jwt
+from invenio_accounts.models import User, UserIdentity
 from invenio_db import db
-from invenio_oauthclient.handlers import token_getter
-from invenio_oauthclient.handlers.rest import response_handler, default_remote_response_handler
-from invenio_oauthclient.models import RemoteAccount, RemoteToken
-from invenio_oauthclient.utils import oauth_unlink_external_id, oauth_link_external_id, obj_or_import_string
-from invenio_openid_connect import InvenioAuthOpenIdRemote
-from werkzeug.local import LocalProxy
+from invenio_oauthclient import current_oauthclient
+from invenio_oauthclient.contrib.settings import OAuthSettingsHelper
+from invenio_oauthclient.signals import account_info_received
+from invenio_oauthclient.utils import oauth_link_external_id
 
-from cesnet_openid_remote.constants import OPENIDC_GROUPS_KEY, OPENIDC_CONFIG, OPENIDC_GROUPS_SCOPE
-from cesnet_openid_remote.proxies import current_cesnet_openid
-
-"""Pre-configured remote application for enabling sign in/up with eduID federated accounts."""
-
-OAUTHCLIENT_CESNET_HIDDEN_GROUPS = ()
-"""Tunable list of groups that will be invisible to this app."""
-
-OAUTHCLIENT_CESNET_HIDDEN_GROUPS_RE = ()
-"""Tunable list of regexps of groups to invisible to this app."""
+from cesnet_openid_remote.communities import account_info_link_perun_groups, \
+    link_perun_groups
 
 
-class CesnetOpenIdRemote(InvenioAuthOpenIdRemote):
+class CesnetOAuthSettingsHelper(OAuthSettingsHelper):
     """CESNET OIDC Remote Auth backend for OARepo."""
-    CONFIG_OPENID = OPENIDC_CONFIG
-
-    name = 'CESNET eduID Login'
-    description = 'Log In with your eduID account'
 
     def __init__(self):
-        """Initialize the remote app."""
-        super(CesnetOpenIdRemote, self).__init__()
+        access_token_url = "https://login.cesnet.cz/oidc/token"
+        authorize_url = "https://login.cesnet.cz/oidc/authorize"
 
-        self.extras_serializer = LocalProxy(lambda: obj_or_import_string(
-            current_app.config.get(
-                'OAUTHCLIENT_CESNET_OPENID_EXTRA_DATA_SERIALIZER', self.fetch_extra_data)))
+        super().__init__(
+            "Perun",
+            "Perun oauth service.",
+            "https://login.cesnet.cz/oidc/",
+            "PERUN_APP_CREDENTIALS",
+            request_token_params={
+                "scope": "openid profile email eduperson_entitlement isCesnetEligibleLastSeen"
+            },
+            access_token_url=access_token_url,
+            authorize_url=authorize_url,
+            content_type="application/json",
+            precedence_mask=None,
+            signup_options=None,
+        )
 
-    def remote_app(self) -> dict:
-        """Configure and return remote app."""
-        conf = super(CesnetOpenIdRemote, self).remote_app()
-        conf.update(dict(
-            response_handler=default_remote_response_handler,
-            authorized_redirect_url='/oauth/complete/',
-            error_redirect_url='/error',
-            disconnect_redirect_url='/logged-out',
-            logout_url='https://login.cesnet.cz/oidc/endsession'))
-        return conf
+        self._handlers = dict(
+            authorized_handler="invenio_oauthclient.handlers:authorized_signup_handler",
+            signup_handler=dict(
+                info="cesnet_openid_remote.remote:account_info",
+                info_serializer="cesnet_openid_remote.remote:account_info_serializer",
+                setup="cesnet_openid_remote.remote:account_setup",
+                view="invenio_oauthclient.handlers:signup_handler",
+            ),
+        )
 
-    def _account_setup(self, remote, token, refresh=False):
-        if refresh:
-            session.pop('user_info')
+        self._rest_handlers = dict(
+            authorized_handler="invenio_oauthclient.handlers.rest:authorized_signup_handler",
+            signup_handler=dict(
+                info="cesnet_openid_remote.remote:account_info",
+                info_serializer="cesnet_openid_remote.remote:account_info_serializer",
+                setup="cesnet_openid_remote.remote:account_setup",
+                view="invenio_oauthclient.handlers.rest:signup_handler",
+            ),
+            response_handler="invenio_oauthclient.handlers.rest:default_remote_response_handler",
+            authorized_redirect_url="/",
+            signup_redirect_url="/",
+            error_redirect_url="/",
+        )
 
-        user_info = self.get_userinfo(remote)
-        user_id = self.get_user_id(remote, email=user_info.email)
+    def get_handlers(self):
+        """Return CESNET auth handlers."""
+        return self._handlers
 
-        with db.session.begin_nested():
-            # Update extra_data.
-            groups = self.remote_groups_and_extra_data(token.remote_account,
-                                                       dict(user_info=user_info, user_id=user_id))
-            assert not isinstance(g.identity, AnonymousIdentity)
+    def get_rest_handlers(self):
+        """Return CESNET auth REST handlers."""
+        return self._rest_handlers
 
-            user = token.remote_account.user
-            current_cesnet_openid.sync_user_roles(user, groups)
 
-        return user_id, user, groups
+_cesnet_app = CesnetOAuthSettingsHelper()
 
-    def handle_authorized(self, resp, remote, *args, **kwargs):
-        """Handle user authorization.
-        :param resp: User authorization response
-        :param remote: The remote application
-        """
-        from invenio_oauthclient.handlers.rest import authorized_signup_handler
-        response = authorized_signup_handler(resp, remote, *args, **kwargs)
-        token = RemoteToken.get_by_token(client_id=remote.consumer_key,
-                                         access_token=token_getter(remote)[0])
+"""
+CESNET OpenID remote app.
+"""
+REMOTE_APP = _cesnet_app.remote_app
 
-        if token:
-            last_update = token.remote_account.extra_data.get('updated', datetime.utcnow().isoformat())
-            refresh_timedelta = current_app.config['CESNET_OPENID_REMOTE_REFRESH_TIMEDELTA']
 
-            if last_update < (datetime.utcnow() + refresh_timedelta).isoformat():
-                self._account_setup(remote, token, refresh=True)
-                db.session.commit()
-        return response
+def account_info_serializer(remote, resp):
+    """
+    Serialize the account info response object.
 
-    def handle_signup(self, remote, *args, **kwargs):
-        """Handle signup.
-        :param remote: The remote application
-        """
-        from invenio_oauthclient.handlers.rest import signup_handler
-        return signup_handler(remote, *args, **kwargs)
+    :param remote: The remote application.
+    :param resp: The response of the `authorized` endpoint.
 
-    def account_setup(self, remote, token, resp):
-        """Perform additional setup after user have been logged in."""
-        token.remote_account.extra_data = {}
-        user_id, user, _ = self._account_setup(remote, token)
+    :returns: A dictionary with serialized user information.
+    """
+    decoded_token = jwt.decode(resp["id_token"], options={"verify_signature": False})
+
+    return {
+        "external_id": decoded_token["sub"],
+        "external_method": remote.name,
+        "user": {
+            "email": decoded_token.get("email"),
+            "profile": {
+                "full_name": decoded_token.get("name"),
+            },
+        },
+    }
+
+
+def account_info(remote, resp):
+    """
+    Retrieve remote account information used to find local user.
+
+    It returns a dictionary with the following structure:
+        {
+            'external_id': 'sub',
+            'external_method': 'perun',
+            'user': {
+                'email': 'Email address',
+                'profile': {
+                    'full_name': 'Full Name',
+                },
+            }
+        }
+    :param remote: The remote application.
+    :param resp: The response of the `authorized` endpoint.
+
+    :returns: A dictionary with the user information.
+    """
+    handlers = current_oauthclient.signup_handlers[remote.name]
+    handler_resp = handlers["info_serializer"](resp)
+
+    return handler_resp
+
+
+def account_setup(remote, token, resp):
+    """
+    Perform additional setup after user have been logged in.
+
+    :param remote: The remote application.
+    :param token: The token value.
+    :param resp: The response.
+    """
+    decoded_token = jwt.decode(resp["id_token"], options={"verify_signature": False})
+
+    with db.session.begin_nested():
+        token.remote_account.extra_data = {
+            "full_name": decoded_token["name"],
+        }
+
+        user = token.remote_account.user
 
         # Create user <-> external id link.
-        oauth_link_external_id(user, dict(id=user_id, method=self.name))
+        oauth_link_external_id(user, {"id": decoded_token["sub"], "method": "perun"})
 
-    def fetch_extra_data(self, user_info, user_id):
-        """"Fetch extra account data from resource."""
-        extra_data = user_info
+    link_perun_groups(remote, user)
 
-        group_uris = extra_data.pop(OPENIDC_GROUPS_SCOPE, [])
-        group_uris = [u for u in group_uris if current_cesnet_openid.validate_group_uri(u)]
-        extra_data[OPENIDC_GROUPS_KEY] = group_uris
 
-        extra_data['external_id'] = user_id
-        extra_data['external_method'] = self.name
-        return extra_data
+# During overlay initialization.
+@account_info_received.connect
+def autocreate_user(remote, token=None, response=None, account_info=None):
+    assert account_info is not None
 
-    def remote_groups_and_extra_data(self, account, resource, refresh_timedelta=None):
-        """Fetch account roles and extra data from resource if necessary."""
-        updated = datetime.utcnow()
-        modified_since = updated
-        if refresh_timedelta is not None:
-            modified_since += refresh_timedelta
-        modified_since = modified_since.isoformat()
-        last_update = account.extra_data.get("updated", modified_since)
+    email = account_info["user"]["email"]
+    id, method = account_info["external_id"], account_info["external_method"]
+    user_profile = {
+        "affiliations": "",
+        "full_name": account_info["user"]["profile"]["full_name"],
+    }
 
-        if last_update > modified_since:
-            return account.extra_data.get(OPENIDC_GROUPS_KEY, [])
+    user_identity = UserIdentity.query.filter_by(id=id, method=method).one_or_none()
+    if not user_identity:
+        user = User(email=email, active=True, user_profile=user_profile)
 
-        user_info = resource.get('user_info')
-        user_id = resource.pop('user_id')
-        extra_data = self.extras_serializer(user_info, user_id)
-
-        groups = extra_data.get(OPENIDC_GROUPS_KEY, [])
-        account.extra_data.update(
-            updated=updated.isoformat(), **extra_data
-        )
-        return groups
-
-    def _disconnect(self, remote, *args, **kwargs):
-        """Handle unlinking of remote account.
-
-           :param remote: The remote application.
         """
-        if not current_user.is_authenticated:
-            return current_app.login_manager.unauthorized()
+        Workaround note:
 
-        account = RemoteAccount.get(user_id=current_user.get_id(),
-                                    client_id=remote.consumer_key)
-        sub = account.extra_data.get('sub')
-        user_info = self.get_userinfo(remote)
-        resource = dict(user_info=user_info,
-                        user_id=self.get_user_id(remote, email=user_info.email))
+        When we create a user, we need to set 'confirmed_at' property,
+        because contrary to the default security settings (False),
+        the config variable SECURITY_CONFIRMABLE is set to True.
+        Without setting 'confirmed_at' to some value, it is impossible to log in.
+        """
+        user.confirmed_at = datetime.datetime.now()
 
-        groups = self.remote_groups_and_extra_data(account, resource)
-        roles = current_cesnet_openid.groups_roles(groups)
-        current_cesnet_openid.remove_user_roles(current_user, roles, reverse=True)
+        try:
+            db.session.add(user)
+        except:
+            db.session.rollback()
+            raise
+        finally:
+            db.session.commit()
 
-        if sub:
-            oauth_unlink_external_id({'id': sub, 'method': self.name})
-        if account:
-            with db.session.begin_nested():
-                account.delete()
+        user_identity = UserIdentity(id=id, method=method, id_user=user.id)
+        try:
+            db.session.add(user_identity)
+        except:
+            db.session.rollback()
+            raise
+        finally:
+            db.session.commit()
 
-    def handle_disconnect(self, remote, *args, **kwargs):
-        """Handle unlinking of remote account."""
-        self._disconnect(remote, *args, **kwargs)
-        redirect_url = current_app.config["OAUTHCLIENT_REST_REMOTE_APPS"][
-            remote.name
-        ]["disconnect_redirect_url"]
-        return response_handler(remote, redirect_url)
+    else:
+        assert user_identity.user is not None
+
+        user_identity.user.email = email
+        user_identity.user.user_profile = user_profile
+
+        try:
+            db.session.add(user_identity.user)
+        except:
+            db.session.rollback()
+            raise
+        finally:
+            db.session.commit()
+
+
+account_info_received.connect(account_info_link_perun_groups)

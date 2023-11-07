@@ -5,30 +5,19 @@ on: [ push ]
 jobs:
   build:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres
-        env:
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     strategy:
       matrix:
-        python-version: [ 3.8 ]
-        SQLALCHEMY_DATABASE_URI: ["sqlite:///:memory:", "postgresql://postgres:postgres@postgres/ci-test"]
+        python-version: [ 3.9, "3.10" ]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v3
         with:
           python-version: ${{ matrix.python-version }}
       - name: Cache pip
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           # This path is specific to Ubuntu
           path: ~/.cache/pip
@@ -38,52 +27,21 @@ jobs:
             ${{ runner.os }}-pip-
             ${{ runner.os }}-
 
-      - name: Configure sysctl limits
-        run: |
-          sudo swapoff -a
-          sudo sysctl -w vm.swappiness=1
-          sudo sysctl -w fs.file-max=262144
-          sudo sysctl -w vm.max_map_count=262144
-
-      - name: Runs Elasticsearch
-        uses: elastic/elastic-github-actions/elasticsearch@master
-        with:
-          stack-version: 7.6.0
-
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip==20.2.4 wheel setuptools
-          pip install -e .[tests]
-
-      - name: Test with pytest
-        run: |
-          pytest tests
+          python -m pip install --upgrade pip wheel setuptools
+          pip install -e .[devs]
 
       - name: Check manifest
         run: |
           check-manifest
-      #
-      #    - name: Coveralls
-      #      uses: AndreMiras/coveralls-python-action@develop
-      #      with:
-      #        parallel: true
-      #        flag-name: Test with pytest
-
-      #  coveralls_finish:
-      #    needs: build
-      #    runs-on: ubuntu-latest
-      #    steps:
-      #      - name: Coveralls Finished
-      #        uses: AndreMiras/coveralls-python-action@develop
-      #        with:
-      #          parallel-finished: true
 
       - name: Build package to publish
         run: |
           python setup.py sdist bdist_wheel
 
       - name: Archive production artifacts
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: dist
           path: dist
@@ -93,7 +51,7 @@ jobs:
     needs: build
     steps:
       - name: Use built artifacts
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           name: dist
           path: dist

@@ -1,232 +1,238 @@
-# -*- coding: utf-8 -*-
-#
-# Copyright (C) 2021 CESNET.
-#
-# CESNET-OpenID-Remote is free software; you can redistribute it and/or
-# modify it under the terms of the MIT License; see LICENSE file for more
-# details.
-
-"""Pytest configuration.
-
-See https://pytest-invenio.readthedocs.io/ for documentation on which test
-fixtures are available.
-"""
+import copy
 import os
-import shutil
-import tempfile
+from unittest.mock import Mock
 
 import pytest
-from flask import Flask
-from flask_oauthlib.client import OAuth as FlaskOAuth, OAuthResponse
-from invenio_accounts import InvenioAccounts
-from invenio_accounts.proxies import current_datastore
-from invenio_db import InvenioDB, db
-from invenio_oauthclient import InvenioOAuthClient, InvenioOAuthClientREST
-from invenio_oauthclient.views.client import rest_blueprint
-from invenio_openid_connect import InvenioOpenIDConnect
-from invenio_openid_connect.views import blueprint as openid_blueprint
-from oarepo_communities import OARepoCommunities
-from oarepo_communities.api import OARepoCommunity
-from sqlalchemy_utils import database_exists, create_database, drop_database
+from invenio_access.permissions import system_identity
+from invenio_app.factory import create_api
+from invenio_communities.cli import create_communities_custom_field
+from invenio_communities.communities.records.api import Community
+from invenio_communities.proxies import current_communities
+from oarepo_communities.cf.aai import AAIMappingCF
 
-from cesnet_openid_remote import CesnetOpenIdRemote, CESNETOpenIDRemote
-from cesnet_openid_remote.constants import OPENIDC_GROUPS_SCOPE
-from cesnet_openid_remote.models import CesnetGroup
+from cesnet_openid_remote import remote
 
 
-@pytest.fixture
-def base_app(request):
-    """Flask application fixture without OAuthClient initialized."""
-    # allow HTTP for keycloak tests, and create the KEYCLOAK_REMOTE_APP
-    os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+@pytest.fixture(scope="module")
+def create_app(instance_path, entry_points):
+    """Application factory fixture."""
 
-    instance_path = tempfile.mkdtemp()
-    base_app = Flask('testapp')
-    base_app.config.update(
-        TESTING=True,
-        WTF_CSRF_ENABLED=False,
-        LOGIN_DISABLED=False,
-        CACHE_TYPE='simple',
-        OAUTHCLIENT_REST_REMOTE_APPS=dict(
-            cesnet=CesnetOpenIdRemote().remote_app(),
-        ),
-        CESNET_OPENIDC_CONFIG=dict(
-            base_url='https://localhost/tests',
-            consumer_key='TEST_OIDC_KEY',
-            consumer_secret='TEST_OIDC_SECRET',
-            scope=f'openid email profile {OPENIDC_GROUPS_SCOPE} isCesnetEligibleLastSeen'
-        ),
-        OAUTHCLIENT_STATE_EXPIRES=300,
-        # use local memory mailbox
-        EMAIL_BACKEND='flask_email.backends.locmem.Mail',
-        SQLALCHEMY_DATABASE_URI=os.getenv('SQLALCHEMY_DATABASE_URI',
-                                          'sqlite://'),
-        SERVER_NAME='localhost',
-        DEBUG=False,
-        SECRET_KEY='TEST',
-        SECURITY_DEPRECATED_PASSWORD_SCHEMES=[],
-        SQLALCHEMY_TRACK_MODIFICATIONS=False,
-        SECURITY_PASSWORD_HASH='plaintext',
-        SECURITY_PASSWORD_SCHEMES=['plaintext'],
-        APP_ALLOWED_HOSTS=['localhost'],
-        USERPROFILES_EXTEND_SECURITY_FORMS=True,
-        SECURITY_SEND_REGISTER_EMAIL=False,
-        OAUTHCLIENT_CESNET_OPENID_PROTECTED_ROLES=['admin', 'notextising']
-    )
-    InvenioDB(base_app)
-    InvenioAccounts(base_app)
-
-    with base_app.app_context():
-        if str(db.engine.url) != 'sqlite://' and \
-            not database_exists(str(db.engine.url)):
-            create_database(str(db.engine.url))
-        db.create_all()
-
-    def teardown():
-        with base_app.app_context():
-            db.session.close()
-            if str(db.engine.url) != 'sqlite://':
-                drop_database(str(db.engine.url))
-            shutil.rmtree(instance_path)
-            db.engine.dispose()
-
-    request.addfinalizer(teardown)
-
-    base_app.test_request_context().push()
-    return base_app
+    return create_api
 
 
-@pytest.fixture
-def app(base_app):
-    """Flask application fixture."""
-    FlaskOAuth(base_app)
-    InvenioOAuthClient(base_app)
-    InvenioOAuthClientREST(base_app)
-    InvenioOpenIDConnect(base_app)
-    CESNETOpenIDRemote(base_app)
-
-    # Register blueprint
-    base_app.register_blueprint(rest_blueprint)
-    base_app.register_blueprint(openid_blueprint)
-    return base_app
+@pytest.fixture(scope="module")
+def community_service(app):
+    """Community service."""
+    return current_communities.service
 
 
-@pytest.fixture
-def communities_app(app):
-    """Flask application with communities extension."""
-    OARepoCommunities(app)
-
-    return app
+@pytest.fixture(scope="module")
+def member_service(community_service):
+    """Members subservice."""
+    return community_service.members
 
 
-@pytest.fixture
-def group_uris(cesnet_groups):
-    """Group URIs fixture."""
+@pytest.fixture(scope="module")
+def app_config(app_config):
+    # Custom fields
+    app_config["JSONSCHEMAS_HOST"] = "localhost"
+    app_config[
+        "RECORDS_REFRESOLVER_CLS"
+    ] = "invenio_records.resolver.InvenioRefResolver"
+    app_config[
+        "RECORDS_REFRESOLVER_STORE"
+    ] = "invenio_jsonschemas.proxies.current_refresolver_store"
+
+    app_config["COMMUNITIES_CUSTOM_FIELDS"] = [
+        AAIMappingCF("aai_mapping"),
+    ]
+    app_config["SEARCH_HOSTS"] = [
+        {
+            "host": os.environ.get("OPENSEARCH_HOST", "localhost"),
+            "port": os.environ.get("OPENSEARCH_PORT", "9200"),
+        }
+    ]
+
+    app_config["CACHE_TYPE"] = "SimpleCache"  # Flask-Caching related configs
+    app_config["CACHE_DEFAULT_TIMEOUT"] = 300
+
+    app_config["OAUTHCLIENT_REMOTE_APPS"] = {"eduid": remote.REMOTE_APP}
+    app_config["PERUN_APP_CREDENTIALS_CONSUMER_KEY"] = "lalala"
+    return app_config
+
+
+@pytest.fixture(scope="function")
+def minimal_community():
+    """Minimal community metadata."""
     return {
-        'exists': 'urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098cebb426?=displayName=example#perun.cesnet.cz',
-        'new': 'urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098c3bb426?=displayName=new#perun.cesnet.cz',
-        'invalid': 'urn:geant:cesnet.cz:group:f0c14f62-b19c-447e-b044-c3098cebb426#perun.cesnet.cz'
+        "access": {
+            "visibility": "public",
+            "record_policy": "open",
+        },
+        "slug": "public",
+        "metadata": {
+            "title": "My Community",
+        },
     }
 
 
-@pytest.fixture
-def users_fixture(base_app):
-    """Flask app with example data used to test models."""
-    with base_app.app_context():
-        datastore = base_app.extensions['security'].datastore
-        datastore.create_user(
-            email='test1@oarepo.org',
-            password='tester',
-            active=True
-        )
-        datastore.create_user(
-            email='test2@oarepo.org',
-            password='tester',
-            active=True
-        )
-        datastore.create_user(
-            email='test3@oarepo.org',
-            password='tester',
-            active=True
-        )
-        datastore.create_user(
-            email='john.doe@example.oarepo.org',
-            password='tester',
-            active=True
-        )
-        datastore.commit()
+@pytest.fixture(scope="function")
+def minimal_community2(minimal_community):
+    edited = copy.deepcopy(minimal_community)
+    edited["slug"] = "comm2"
+    return edited
 
 
-@pytest.fixture()
-def example_cesnet(request):
-    """CESNET example data."""
-    file_path = os.path.join(os.path.dirname(__file__),
-                             'data/cesnet_openid_response.json')
-    with open(file_path) as response_file:
-        json_data = response_file.read()
+@pytest.fixture(scope="module")
+def users(UserFixture, app, database):
+    """Users."""
+    users = {}
+    for r in ["owner", "manager", "curator", "reader"]:
+        u = UserFixture(
+            email=f"{r}@{r}.org",
+            password=r,
+            username=r,
+            user_profile={
+                "full_name": f"{r} {r}",
+                "affiliations": "CERN",
+            },
+            preferences={
+                "visibility": "public",
+                "email_visibility": "restricted",
+            },
+            active=True,
+            confirmed=True,
+        )
+        u.create(app, database)
+        users[r] = u
+    # when using `database` fixture (and not `db`), commit the creation of the
+    # user because its implementation uses a nested session instead
+    database.session.commit()
+    return users
 
-    from jwt import encode
-    token = encode(dict(name="John Doe"), key="1234")
 
-    return OAuthResponse(
-        resp=None,
-        content=json_data,
-        content_type='application/json'
-    ), dict(
-        access_token=token,
-        token_type='bearer',
-        expires_in=1199,
-        refresh_token='test_refresh_token'
-    ), dict(
-        user=dict(
-            email='john.doe@oarepo.org',
-            profile=dict(username='abcd1234@einfra.cesnet.cz', full_name='John Doe'),
-        ),
-        external_id='abcd1234@einfra.cesnet.cz',
-        external_method='CESNET eduID Login',
-        active=True,
-        eduperson_entitlement_extended=[
-            "urn:geant:cesnet.cz:group:f0c14f62-b19c-447e-b044-c3098cebb426#perun.cesnet.cz",
-            "urn:geant:cesnet.cz:group:8ece6adb-8677-4482-9aec-5a556c646389#perun.cesnet.cz",
-            "urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098cebb426?=displayName=example#perun.cesnet.cz",
-            "urn:geant:cesnet.cz:groupAttributes:8ece6adb-8677-4482-9aec-5a556c646389?=displayName=example:subgroup#perun.cesnet.cz",
-            "urn:geant:cesnet.cz:groupUuid:f0c14f62-b19c-447e-b044-c3098cebb426#perun.cesnet.cz",
-            "urn:geant:cesnet.cz:groupUuid:8ece6adb-8677-4482-9aec-5a556c646389#perun.cesnet.cz",
-            "urn:mace:cesnet.cz:other-namespace-group"
-        ]
+@pytest.fixture(scope="module")
+def community_factory(community_service):
+    def _community(identity, community_dict):
+        c = community_service.create(identity, community_dict)
+        Community.index.refresh()
+        return c
+
+    return _community
+
+
+@pytest.fixture(scope="function")
+def community(community_factory, users, community_service, minimal_community, location):
+    return community_factory(users["owner"].identity, minimal_community)
+
+
+@pytest.fixture(scope="function")
+def community2(
+    community_factory, users, community_service, minimal_community2, location
+):
+    """A community."""
+    return community_factory(users["owner"].identity, minimal_community2)
+
+
+@pytest.fixture(scope="function")
+def init_cf(base_app):
+    result = base_app.test_cli_runner().invoke(
+        create_communities_custom_field, ["-f", "aai_mapping"]
     )
+    assert result.exit_code == 0
+    Community.index.refresh()
 
 
-@pytest.fixture()
-def community():
-    current_datastore.commit()
+@pytest.fixture(scope="module")
+def aai_mapping_example_dict():
+    return [{"role": "curator", "aai_group": "test_community:curator"}]
 
-    community = OARepoCommunity.create(
-        {'description': 'Community description'},
-        title='Test',
-        id_='testing-community')
-    db.session.commit()
 
+@pytest.fixture(scope="function")
+def community_with_aai_mapping_cf(
+    users,
+    community_service,
+    community,
+    minimal_community,
+    aai_mapping_example_dict,
+    init_cf,
+):
+    minimal_community["custom_fields"]["aai_mapping"] = aai_mapping_example_dict
+    community = community_service.update(
+        system_identity, community["id"], minimal_community
+    )
+    Community.index.refresh()
     return community
 
 
-@pytest.fixture()
-def protected_roles():
-    return [current_datastore.create_role(name='admin')]
+@pytest.fixture(scope="function")
+def community2_with_aai_mapping_cf(
+    users,
+    community_service,
+    community2,
+    minimal_community2,
+    aai_mapping_example_dict,
+    init_cf,
+):
+    edited = copy.deepcopy(aai_mapping_example_dict)
+    edited.append({"role": "curator", "aai_group": "alt_test_community:curator"})
+    minimal_community2["custom_fields"]["aai_mapping"] = edited
+    community = community_service.update(
+        system_identity, community2["id"], minimal_community2
+    )
+    Community.index.refresh()
+    return community
 
 
-@pytest.fixture()
-def cesnet_groups():
-    with db.session.begin_nested():
-        cg1 = CesnetGroup(
-            uuid='f0c14f62-b19c-447e-b044-c3098cebb426',
-            display_name='example',
-            uri='urn:geant:cesnet.cz:groupAttributes:f0c14f62-b19c-447e-b044-c3098cebb426?=displayName=example#perun.cesnet.cz')
-        db.session.add(cg1)
+@pytest.fixture
+def return_userinfo_curator():
+    def _return_userinfo(val):
+        if val == "https://login.cesnet.cz/oidc/userinfo":
+            usrinfo_obj = Mock()
+            usrinfo_obj.data = {"eduperson_entitlement": ["test_community:curator"]}
+            return usrinfo_obj
 
-        cg2 = CesnetGroup(
-            uuid='8ece6adb-8677-4482-9aec-5a556c646389',
-            display_name='example:subgroup',
-            uri='urn:geant:cesnet.cz:groupAttributes:8ece6adb-8677-4482-9aec-5a556c646389?=displayName=example:subgroup#perun.cesnet.cz')
-        db.session.add(cg2)
-    return [cg1, cg2]
+    return _return_userinfo
+
+
+@pytest.fixture
+def return_userinfo_two_communities():
+    def _return_userinfo(val):
+        if val == "https://login.cesnet.cz/oidc/userinfo":
+            usrinfo_obj = Mock()
+            usrinfo_obj.data = {
+                "eduperson_entitlement": [
+                    "test_community:curator",
+                    "alt_test_community:curator",
+                ]
+            }
+            return usrinfo_obj
+
+    return _return_userinfo
+
+
+@pytest.fixture
+def return_userinfo_both():
+    def _return_userinfo(val):
+        if val == "https://login.cesnet.cz/oidc/userinfo":
+            usrinfo_obj = Mock()
+            usrinfo_obj.data = {
+                "eduperson_entitlement": [
+                    "test_community:curator",
+                    "test_community:reader",
+                ]
+            }
+            return usrinfo_obj
+
+    return _return_userinfo
+
+
+@pytest.fixture
+def return_userinfo_noone():
+    def _return_userinfo(val):
+        if val == "https://login.cesnet.cz/oidc/userinfo":
+            usrinfo_obj = Mock()
+            usrinfo_obj.data = {"eduperson_entitlement": []}
+            return usrinfo_obj
+
+    return _return_userinfo
