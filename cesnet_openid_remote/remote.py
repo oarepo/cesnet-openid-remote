@@ -92,7 +92,7 @@ def account_info_serializer(remote, resp):
 
     :returns: A dictionary with serialized user information.
     """
-    decoded_token = jwt.decode(resp["id_token"], options={"verify_signature": False})
+    decoded_token = jwt.decode(resp["id_token"], options={"verify_signature": True})
 
     return {
         "external_id": decoded_token["sub"],
@@ -140,7 +140,7 @@ def account_setup(remote, token, resp):
     :param token: The token value.
     :param resp: The response.
     """
-    decoded_token = jwt.decode(resp["id_token"], options={"verify_signature": False})
+    decoded_token = jwt.decode(resp["id_token"], options={"verify_signature": True})
 
     with db.session.begin_nested():
         token.remote_account.extra_data = {
