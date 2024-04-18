@@ -1,3 +1,11 @@
+# -*- coding: utf-8 -*-
+#
+# Copyright (C) 2024 CESNET.
+#
+# CESNET-OpenID-Remote is free software; you can redistribute it and/or
+# modify it under the terms of the MIT License; see LICENSE file for more
+# details.
+
 import copy
 import os
 from unittest.mock import Mock
@@ -57,7 +65,7 @@ def app_config(app_config):
     app_config["CACHE_DEFAULT_TIMEOUT"] = 300
 
     app_config["OAUTHCLIENT_REMOTE_APPS"] = {"eduid": remote.REMOTE_APP}
-    app_config["PERUN_APP_CREDENTIALS_CONSUMER_KEY"] = "lalala"
+    app_config["EINFRA_AAI_APP_CREDENTIALS_CONSUMER_KEY"] = "lalala"
     return app_config
 
 
